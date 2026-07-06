@@ -92,7 +92,7 @@
 +            if (awtException != null) {
 +                LOGGER.error("You are using a headless JRE distribution.");
 +                LOGGER.error("This distribution is missing certain graphic libraries that the Minecraft server needs to function.");
-+                LOGGER.error("For instructions on how to install the non-headless JRE, see https://docs.papermc.io/misc/java-install");
++                LOGGER.error("Install a non-headless Java runtime to use the graphical server window.");
 +                LOGGER.error("");
 +                LOGGER.error(awtException);
 +                return;

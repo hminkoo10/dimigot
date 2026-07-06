@@ -91,49 +91,39 @@ import static io.leangen.geantyref.GenericTypeReflector.erase;
 public class PaperConfigurations extends Configurations<GlobalConfiguration, WorldConfiguration> {
 
     private static final Logger LOGGER = LogUtils.getClassLogger();
-    static final String GLOBAL_CONFIG_FILE_NAME = "paper-global.yml";
-    static final String WORLD_DEFAULTS_CONFIG_FILE_NAME = "paper-world-defaults.yml";
-    static final String WORLD_CONFIG_FILE_NAME = "paper-world.yml";
+    static final String GLOBAL_CONFIG_FILE_NAME = "dimigot-global.yml";
+    static final String WORLD_DEFAULTS_CONFIG_FILE_NAME = "dimigot-world-defaults.yml";
+    static final String WORLD_CONFIG_FILE_NAME = "dimigot-world.yml";
     public static final String CONFIG_DIR = "config";
     private static final String BACKUP_DIR ="legacy-backup";
 
     private static final String GLOBAL_HEADER = String.format("""
-            This is the global configuration file for Paper.
+            This is the global configuration file for Dimigot.
             As you can see, there's a lot to configure. Some options may impact gameplay, so use
             with caution, and make sure you know what each option does before configuring.
 
-            If you need help with the configuration or have any questions related to Paper,
-            join us in our Discord or check the docs page.
+            If you need help with the configuration, check the Dimigot project page.
 
             The world configuration options have been moved inside
             their respective world folder. The files are named %s
 
-            File Reference: https://docs.papermc.io/paper/reference/global-configuration/
-            Docs: https://docs.papermc.io/
-            Discord: https://discord.gg/papermc
-            Website: https://papermc.io/""", WORLD_CONFIG_FILE_NAME);
+            """, WORLD_CONFIG_FILE_NAME);
 
     private static final String WORLD_DEFAULTS_HEADER = """
-            This is the world defaults configuration file for Paper.
+            This is the world defaults configuration file for Dimigot.
             As you can see, there's a lot to configure. Some options may impact gameplay, so use
             with caution, and make sure you know what each option does before configuring.
 
-            If you need help with the configuration or have any questions related to Paper,
-            join us in our Discord or check the docs page.
+            If you need help with the configuration, check the Dimigot project page.
 
             Configuration options here apply to all worlds, unless you specify overrides inside
             the world-specific config file inside each world folder.
 
-            File Reference: https://docs.papermc.io/paper/reference/world-configuration/
-            Docs: https://docs.papermc.io/
-            Discord: https://discord.gg/papermc
-            Website: https://papermc.io/""";
+            """;
 
     private static final Function<ContextMap, String> WORLD_HEADER = map -> String.format("""
-        This is a world configuration file for Paper.
+        This is a world configuration file for Dimigot.
         This file may start empty but can be filled with settings to override ones in the %s/%s
-        
-        For more information, see https://docs.papermc.io/paper/reference/configuration/#per-world-configuration
         
         World: %s""",
         PaperConfigurations.CONFIG_DIR,
@@ -146,7 +136,7 @@ public class PaperConfigurations extends Configurations<GlobalConfiguration, Wor
         and the world-specific configuration file has been moved inside
         the respective world folder.
         
-        See https://docs.papermc.io/paper/configuration for more information.
+        Check the Dimigot project page for more information.
         """;
 
     @VisibleForTesting

@@ -22,16 +22,16 @@ public final class PaperCommands {
     private static final Map<String, Command> COMMANDS = new HashMap<>();
 
     public static void registerCommands(final MinecraftServer server) {
-        COMMANDS.put("paper", new PaperCommand("paper"));
+        COMMANDS.put("dimigot", new PaperCommand("dimigot"));
         COMMANDS.put("mspt", new MSPTCommand("mspt"));
 
         COMMANDS.forEach((s, command) -> {
-            server.server.getCommandMap().register(s, "Paper", command);
+            server.server.getCommandMap().register(s, "Dimigot", command);
         });
     }
 
     public static void registerCommands() {
-        // Paper commands go here
+        // Dimigot commands go here
         registerInternalCommand(PaperVersionCommand.create(), "bukkit", PaperVersionCommand.DESCRIPTION, List.of("ver", "about"), Set.of());
         registerInternalCommand(PaperPluginsCommand.create(), "bukkit", PaperPluginsCommand.DESCRIPTION, List.of("pl"), Set.of());
     }
@@ -40,7 +40,7 @@ public final class PaperCommands {
         io.papermc.paper.command.brigadier.PaperCommands.INSTANCE.registerWithFlagsInternal(
             null,
             namespace,
-            "Paper",
+            "Dimigot",
             node,
             description,
             aliases,

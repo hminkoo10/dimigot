@@ -115,16 +115,16 @@ public class Main {
                         .defaultsTo(new File("spigot.yml"))
                         .describedAs("Yml file");
 
-                this.acceptsAll(asList("paper-dir", "paper-settings-directory"), "Directory for Paper settings")
+                this.acceptsAll(asList("dimigot-dir", "dimigot-settings-directory"), "Directory for Dimigot settings")
                         .withRequiredArg()
                         .ofType(File.class)
                         .defaultsTo(new File(io.papermc.paper.configuration.PaperConfigurations.CONFIG_DIR))
                         .describedAs("Config directory");
 
-                this.acceptsAll(asList("paper", "paper-settings"), "File for Paper settings")
+                this.acceptsAll(asList("dimigot", "dimigot-settings"), "File for Dimigot settings")
                         .withRequiredArg()
                         .ofType(File.class)
-                        .defaultsTo(new File("paper.yml"))
+                        .defaultsTo(new File("dimigot.yml"))
                         .describedAs("Yml file");
 
                 this.acceptsAll(asList("add-plugin", "add-extra-plugin-jar"), "Specify paths to extra plugin jars to be loaded in addition to those in the plugins folder. This argument can be specified multiple times, once for each extra plugin jar path.")
@@ -178,7 +178,7 @@ public class Main {
             boolean isPreRelease = javaVersionName.contains("-");
             if (isPreRelease) {
                 if (!skip) {
-                    System.err.println("Unsupported Java detected (" + javaVersionName + "). You are running an unsupported, non official, version. Only general availability versions of Java are supported. Please update your Java version. See https://docs.papermc.io/paper/faq#unsupported-java-detected-what-do-i-do for more information.");
+                    System.err.println("Unsupported Java detected (" + javaVersionName + "). You are running an unsupported, non official, version. Only general availability versions of Java are supported. Please update your Java version.");
                     return;
                 }
 
@@ -198,7 +198,7 @@ public class Main {
                     System.setProperty(net.minecrell.terminalconsole.TerminalConsoleAppender.JLINE_OVERRIDE_PROPERTY, "false"); // Paper
                 }
 
-                System.setProperty("library.jansi.version", "Paper"); // Paper - set meaningless jansi version to prevent git builds from crashing on Windows
+                System.setProperty("library.jansi.version", "Dimigot"); // Paper - set meaningless jansi version to prevent git builds from crashing on Windows
                 System.setProperty("jdk.console", "java.base"); // Paper - revert default console provider back to java.base so we can have our own jline
 
                 io.papermc.paper.PaperBootstrap.boot(options);

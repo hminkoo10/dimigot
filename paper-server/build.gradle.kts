@@ -1,6 +1,9 @@
 import io.papermc.fill.model.BuildChannel
 import io.papermc.paperweight.attribute.DevBundleOutput
 import io.papermc.paperweight.util.*
+import java.nio.file.FileSystems
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.time.Instant
 
 plugins {
@@ -186,6 +189,45 @@ tasks.jar {
         )
         for (tld in setOf("net", "com", "org")) {
             attributes("$tld/bukkit", "Sealed" to true)
+        }
+    }
+}
+
+tasks.createPaperclipJar {
+    doLast {
+        val mcVersion = providers.gradleProperty("mcVersion").get()
+        val serverVersion = project.version.toString()
+        val paperclipJar = outputZip.get().asFile.toPath()
+        FileSystems.newFileSystem(paperclipJar, mapOf<String, String>()).use { zipfs ->
+            for (fileName in listOf("versions.list", "patches.list")) {
+                val metadataFile = zipfs.getPath("META-INF", fileName)
+                val text = Files.readString(metadataFile)
+                Files.writeString(
+                    metadataFile,
+                    text.replace("$mcVersion/paper-$mcVersion.jar", "$mcVersion/dimigot-$mcVersion.jar")
+                )
+            }
+
+            val libraryReplacements = mapOf(
+                "io/papermc/paper/paper-api/$serverVersion/paper-api-$serverVersion.jar" to
+                    "kr/dimigo/dimigot/dimigot-api/$serverVersion/dimigot-api-$serverVersion.jar",
+                "me/lucko/spark-paper/1.10.152/spark-paper-1.10.152.jar" to
+                    "me/lucko/spark-dimigot/1.10.152/spark-dimigot-1.10.152.jar",
+            )
+            val librariesList = zipfs.getPath("META-INF", "libraries.list")
+            var librariesText = Files.readString(librariesList)
+                .replace("io.papermc.paper:paper-api:$serverVersion", "kr.dimigo.dimigot:dimigot-api:$serverVersion")
+                .replace("me.lucko:spark-paper:1.10.152", "me.lucko:spark-dimigot:1.10.152")
+            for ((oldPath, newPath) in libraryReplacements) {
+                librariesText = librariesText.replace(oldPath, newPath)
+                val oldEntry = zipfs.getPath("META-INF/libraries/$oldPath")
+                if (Files.exists(oldEntry)) {
+                    val newEntry = zipfs.getPath("META-INF/libraries/$newPath")
+                    Files.createDirectories(newEntry.parent)
+                    Files.move(oldEntry, newEntry, StandardCopyOption.REPLACE_EXISTING)
+                }
+            }
+            Files.writeString(librariesList, librariesText)
         }
     }
 }

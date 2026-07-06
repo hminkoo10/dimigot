@@ -33,17 +33,11 @@ public class SpigotConfig {
 
     private static File CONFIG_FILE;
     private static final String HEADER = """
-        This is the Spigot configuration file for Paper.
+        This is the Spigot configuration file for Dimigot.
         As you can see, there's tons to configure. Some options may impact gameplay, so use
         with caution, and make sure you know what each option does before configuring.
         
-        If you need help with the configuration or have any questions related to Paper,
-        join us in our Discord or check the docs page.
-        
-        File Reference: https://docs.papermc.io/paper/reference/spigot-configuration/
-        Docs: https://docs.papermc.io/
-        Discord: https://discord.gg/papermc
-        Website: https://papermc.io/
+        If you need help with the configuration, check the Dimigot project page.
         """;
     /*========================================================================*/
     public static YamlConfiguration config;

@@ -42,9 +42,7 @@ public class PaperPluginsCommand {
     private static final Component SERVER_PLUGIN_INFO = Component.text("ℹ What is a server plugin?", INFO_COLOR)
         .append(asPlainComponents("""
                                       Server plugins can add new behavior to your server!
-                                      You can find new plugins on Paper's plugin repository, Hangar.
-                                      
-                                      https://hangar.papermc.io/
+                                      You can find new plugins on trusted plugin repositories.
                                       """));
 
     private static final Component LEGACY_PLUGIN_INFO = Component.text("ℹ What is a legacy plugin?", INFO_COLOR)
@@ -62,7 +60,7 @@ public class PaperPluginsCommand {
     private static final Component PLUGIN_TICK = Component.text("- ", NamedTextColor.DARK_GRAY);
     private static final Component PLUGIN_TICK_EMPTY = Component.text(" ");
 
-    private static final Component INFO_ICON_SERVER_PLUGIN = INFO_ICON_START.hoverEvent(SERVER_PLUGIN_INFO).clickEvent(ClickEvent.openUrl("https://docs.papermc.io/paper/adding-plugins"));
+    private static final Component INFO_ICON_SERVER_PLUGIN = INFO_ICON_START.hoverEvent(SERVER_PLUGIN_INFO);
 
     private static final Type JAVA_PLUGIN_PROVIDER_TYPE = new TypeToken<PluginProvider<JavaPlugin>>() {}.getType();
 

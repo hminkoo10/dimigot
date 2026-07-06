@@ -66,7 +66,7 @@ public class HorriblePlayerLoginEventHack {
                     
                     This event forces an alternative player loading path that is
                     deprecated and will be removed in a future release.
-                    For more information, see: https://go.papermc.io/announcement/1.21.7
+                    Please update the affected plugin.
                     
                     Please notify the following plugin developers: {}
                     ============================================================""", plugins);
