@@ -236,7 +236,11 @@ index 0000000..ecb62db
 +            return ZERO_OFFSET;
 +        }
 +        UUID playerId = CURRENT_PLAYER_ID.get();
-+        return playerId == null ? fallbackOffset : PLAYER_OFFSETS.computeIfAbsent(playerId, DimicraftCoordinateOffset::createPlayerOffset);
++        if (playerId == null) {
++            return ZERO_OFFSET;
++        }
++
++        return PLAYER_OFFSETS.computeIfAbsent(playerId, DimicraftCoordinateOffset::createPlayerOffset);
 +    }
 +
 +    // Random per session: entries are evicted at login via rotatePlayer, so every connection sees fresh coordinates.
@@ -1141,4 +1145,3 @@ index d0a2ae3..23c527b 100644
          return entity.isInterpolating()
 -- 
 2.51.0.windows.1
-
