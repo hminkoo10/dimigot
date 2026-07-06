@@ -1,0 +1,878 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?=EA=B5=AC=ED=98=84=EB=AF=BC?= <hminkoo10@isolvitm.goe.go.kr>
+Date: Mon, 6 Jul 2026 09:47:03 +0900
+Subject: [PATCH] Dimicraft coordinate offset
+
+
+diff --git a/io/papermc/paper/dimicraft/DimicraftCoordinateOffset.java b/io/papermc/paper/dimicraft/DimicraftCoordinateOffset.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..23fbb219fc1bcfb8a14925b788d4dd776b8f1b21
+--- /dev/null
++++ b/io/papermc/paper/dimicraft/DimicraftCoordinateOffset.java
+@@ -0,0 +1,184 @@
++package io.papermc.paper.dimicraft;
++
++import net.minecraft.core.BlockPos;
++import net.minecraft.core.SectionPos;
++import net.minecraft.world.level.ChunkPos;
++import net.minecraft.world.phys.Vec3;
++
++public final class DimicraftCoordinateOffset {
++    private static final String ENABLED_PROPERTY = "dimicraft.coordinateOffset.enabled";
++    private static final String X_PROPERTY = "dimicraft.coordinateOffset.x";
++    private static final String Z_PROPERTY = "dimicraft.coordinateOffset.z";
++    private static final String ENABLED_ENV = "DIMICRAFT_COORDINATE_OFFSET_ENABLED";
++    private static final String X_ENV = "DIMICRAFT_COORDINATE_OFFSET_X";
++    private static final String Z_ENV = "DIMICRAFT_COORDINATE_OFFSET_Z";
++    private static final int SOUND_POSITION_SCALE = 8;
++
++    private static volatile boolean enabled;
++    private static volatile int blockOffsetX;
++    private static volatile int blockOffsetZ;
++    private static volatile int sectionOffsetX;
++    private static volatile int sectionOffsetZ;
++    private static volatile int scaledSoundOffsetX;
++    private static volatile int scaledSoundOffsetZ;
++
++    static {
++        reloadFromProperties();
++    }
++
++    private DimicraftCoordinateOffset() {
++    }
++
++    public static void reloadFromProperties() {
++        configure(
++            readBoolean(ENABLED_PROPERTY, ENABLED_ENV, false),
++            readInt(X_PROPERTY, X_ENV, 0),
++            readInt(Z_PROPERTY, Z_ENV, 0)
++        );
++    }
++
++    public static void configure(final boolean enabled, final int rawBlockOffsetX, final int rawBlockOffsetZ) {
++        DimicraftCoordinateOffset.enabled = enabled;
++        DimicraftCoordinateOffset.blockOffsetX = alignToSection(rawBlockOffsetX);
++        DimicraftCoordinateOffset.blockOffsetZ = alignToSection(rawBlockOffsetZ);
++        DimicraftCoordinateOffset.sectionOffsetX = DimicraftCoordinateOffset.blockOffsetX >> 4;
++        DimicraftCoordinateOffset.sectionOffsetZ = DimicraftCoordinateOffset.blockOffsetZ >> 4;
++        DimicraftCoordinateOffset.scaledSoundOffsetX = DimicraftCoordinateOffset.blockOffsetX * SOUND_POSITION_SCALE;
++        DimicraftCoordinateOffset.scaledSoundOffsetZ = DimicraftCoordinateOffset.blockOffsetZ * SOUND_POSITION_SCALE;
++    }
++
++    public static boolean enabled() {
++        return enabled;
++    }
++
++    public static int blockOffsetX() {
++        return blockOffsetX;
++    }
++
++    public static int blockOffsetZ() {
++        return blockOffsetZ;
++    }
++
++    public static double toClientX(final double x) {
++        return enabled ? x + blockOffsetX : x;
++    }
++
++    public static double toClientZ(final double z) {
++        return enabled ? z + blockOffsetZ : z;
++    }
++
++    public static double toServerX(final double x) {
++        return enabled ? x - blockOffsetX : x;
++    }
++
++    public static double toServerZ(final double z) {
++        return enabled ? z - blockOffsetZ : z;
++    }
++
++    public static int toClientBlockX(final int x) {
++        return enabled ? x + blockOffsetX : x;
++    }
++
++    public static int toClientBlockZ(final int z) {
++        return enabled ? z + blockOffsetZ : z;
++    }
++
++    public static int toServerBlockX(final int x) {
++        return enabled ? x - blockOffsetX : x;
++    }
++
++    public static int toServerBlockZ(final int z) {
++        return enabled ? z - blockOffsetZ : z;
++    }
++
++    public static int toClientChunkX(final int x) {
++        return enabled ? x + sectionOffsetX : x;
++    }
++
++    public static int toClientChunkZ(final int z) {
++        return enabled ? z + sectionOffsetZ : z;
++    }
++
++    public static int toServerChunkX(final int x) {
++        return enabled ? x - sectionOffsetX : x;
++    }
++
++    public static int toServerChunkZ(final int z) {
++        return enabled ? z - sectionOffsetZ : z;
++    }
++
++    public static int toClientSoundX(final int x) {
++        return enabled ? x + scaledSoundOffsetX : x;
++    }
++
++    public static int toClientSoundZ(final int z) {
++        return enabled ? z + scaledSoundOffsetZ : z;
++    }
++
++    public static int toServerSoundX(final int x) {
++        return enabled ? x - scaledSoundOffsetX : x;
++    }
++
++    public static int toServerSoundZ(final int z) {
++        return enabled ? z - scaledSoundOffsetZ : z;
++    }
++
++    public static BlockPos toClientBlockPos(final BlockPos pos) {
++        return enabled ? new BlockPos(pos.getX() + blockOffsetX, pos.getY(), pos.getZ() + blockOffsetZ) : pos;
++    }
++
++    public static BlockPos toServerBlockPos(final BlockPos pos) {
++        return enabled ? new BlockPos(pos.getX() - blockOffsetX, pos.getY(), pos.getZ() - blockOffsetZ) : pos;
++    }
++
++    public static ChunkPos toClientChunkPos(final ChunkPos pos) {
++        return enabled ? new ChunkPos(pos.x() + sectionOffsetX, pos.z() + sectionOffsetZ) : pos;
++    }
++
++    public static ChunkPos toServerChunkPos(final ChunkPos pos) {
++        return enabled ? new ChunkPos(pos.x() - sectionOffsetX, pos.z() - sectionOffsetZ) : pos;
++    }
++
++    public static SectionPos toClientSectionPos(final SectionPos pos) {
++        return enabled ? SectionPos.of(pos.x() + sectionOffsetX, pos.y(), pos.z() + sectionOffsetZ) : pos;
++    }
++
++    public static SectionPos toServerSectionPos(final SectionPos pos) {
++        return enabled ? SectionPos.of(pos.x() - sectionOffsetX, pos.y(), pos.z() - sectionOffsetZ) : pos;
++    }
++
++    public static Vec3 toClientPosition(final Vec3 pos) {
++        return enabled ? new Vec3(pos.x + blockOffsetX, pos.y, pos.z + blockOffsetZ) : pos;
++    }
++
++    public static Vec3 toServerPosition(final Vec3 pos) {
++        return enabled ? new Vec3(pos.x - blockOffsetX, pos.y, pos.z - blockOffsetZ) : pos;
++    }
++
++    private static int alignToSection(final int value) {
++        return Math.floorDiv(value, 16) * 16;
++    }
++
++    private static boolean readBoolean(final String property, final String env, final boolean fallback) {
++        String value = System.getProperty(property);
++        if (value == null || value.isBlank()) {
++            value = System.getenv(env);
++        }
++        return value == null || value.isBlank() ? fallback : Boolean.parseBoolean(value);
++    }
++
++    private static int readInt(final String property, final String env, final int fallback) {
++        String value = System.getProperty(property);
++        if (value == null || value.isBlank()) {
++            value = System.getenv(env);
++        }
++        if (value == null || value.isBlank()) {
++            return fallback;
++        }
++        try {
++            return Integer.parseInt(value.trim());
++        } catch (final NumberFormatException ignored) {
++            return fallback;
++        }
++    }
++}
+diff --git a/net/minecraft/core/SectionPos.java b/net/minecraft/core/SectionPos.java
+index e6595167980d93772088f63ba6dd0423489d90c4..c0fc6dcce6cbe66ee98e78e1304424ea84d0145b 100644
+--- a/net/minecraft/core/SectionPos.java
++++ b/net/minecraft/core/SectionPos.java
+@@ -1,12 +1,12 @@
+ package net.minecraft.core;
+ 
+ import io.netty.buffer.ByteBuf;
++import io.papermc.paper.dimicraft.DimicraftCoordinateOffset;
+ import it.unimi.dsi.fastutil.longs.LongConsumer;
+ import java.util.Spliterators.AbstractSpliterator;
+ import java.util.function.Consumer;
+ import java.util.stream.Stream;
+ import java.util.stream.StreamSupport;
+-import net.minecraft.network.codec.ByteBufCodecs;
+ import net.minecraft.network.codec.StreamCodec;
+ import net.minecraft.util.Mth;
+ import net.minecraft.world.level.ChunkPos;
+@@ -31,7 +31,17 @@ public class SectionPos extends Vec3i {
+     private static final int RELATIVE_X_SHIFT = 8;
+     private static final int RELATIVE_Y_SHIFT = 0;
+     private static final int RELATIVE_Z_SHIFT = 4;
+-    public static final StreamCodec<ByteBuf, SectionPos> STREAM_CODEC = ByteBufCodecs.LONG.map(SectionPos::of, SectionPos::asLong);
++    public static final StreamCodec<ByteBuf, SectionPos> STREAM_CODEC = new StreamCodec<ByteBuf, SectionPos>() {
++        @Override
++        public SectionPos decode(final ByteBuf input) {
++            return DimicraftCoordinateOffset.toServerSectionPos(SectionPos.of(input.readLong()));
++        }
++
++        @Override
++        public void encode(final ByteBuf output, final SectionPos value) {
++            output.writeLong(DimicraftCoordinateOffset.toClientSectionPos(value).asLong());
++        }
++    };
+ 
+     private SectionPos(final int x, final int y, final int z) {
+         super(x, y, z);
+diff --git a/net/minecraft/network/FriendlyByteBuf.java b/net/minecraft/network/FriendlyByteBuf.java
+index 12cd230ebe97dab655f8546948f06b93f0babf1f..a587555788ad629d8828220a9a62ab59d45bbf8f 100644
+--- a/net/minecraft/network/FriendlyByteBuf.java
++++ b/net/minecraft/network/FriendlyByteBuf.java
+@@ -16,6 +16,7 @@ import io.netty.buffer.ByteBufOutputStream;
+ import io.netty.handler.codec.DecoderException;
+ import io.netty.handler.codec.EncoderException;
+ import io.netty.util.ByteProcessor;
++import io.papermc.paper.dimicraft.DimicraftCoordinateOffset;
+ import it.unimi.dsi.fastutil.ints.IntArrayList;
+ import it.unimi.dsi.fastutil.ints.IntList;
+ import java.io.IOException;
+@@ -398,7 +399,7 @@ public class FriendlyByteBuf extends ByteBuf {
+     }
+ 
+     public static BlockPos readBlockPos(final ByteBuf input) {
+-        return BlockPos.of(input.readLong());
++        return DimicraftCoordinateOffset.toServerBlockPos(BlockPos.of(input.readLong()));
+     }
+ 
+     public FriendlyByteBuf writeBlockPos(final BlockPos pos) {
+@@ -407,24 +408,24 @@ public class FriendlyByteBuf extends ByteBuf {
+     }
+ 
+     public static void writeBlockPos(final ByteBuf output, final BlockPos pos) {
+-        output.writeLong(pos.asLong());
++        output.writeLong(DimicraftCoordinateOffset.toClientBlockPos(pos).asLong());
+     }
+ 
+     public ChunkPos readChunkPos() {
+-        return ChunkPos.unpack(this.readLong());
++        return DimicraftCoordinateOffset.toServerChunkPos(ChunkPos.unpack(this.readLong()));
+     }
+ 
+     public FriendlyByteBuf writeChunkPos(final ChunkPos pos) {
+-        this.writeLong(pos.pack());
++        this.writeLong(DimicraftCoordinateOffset.toClientChunkPos(pos).pack());
+         return this;
+     }
+ 
+     public static ChunkPos readChunkPos(final ByteBuf input) {
+-        return ChunkPos.unpack(input.readLong());
++        return DimicraftCoordinateOffset.toServerChunkPos(ChunkPos.unpack(input.readLong()));
+     }
+ 
+     public static void writeChunkPos(final ByteBuf output, final ChunkPos chunkPos) {
+-        output.writeLong(chunkPos.pack());
++        output.writeLong(DimicraftCoordinateOffset.toClientChunkPos(chunkPos).pack());
+     }
+ 
+     public GlobalPos readGlobalPos() {
+diff --git a/net/minecraft/network/protocol/game/ClientboundAddEntityPacket.java b/net/minecraft/network/protocol/game/ClientboundAddEntityPacket.java
+index cff05f64af7f425b77cbbd7680c5cc592faa798c..c3922433e978117f36bd08bb55c28d422cd88caf 100644
+--- a/net/minecraft/network/protocol/game/ClientboundAddEntityPacket.java
++++ b/net/minecraft/network/protocol/game/ClientboundAddEntityPacket.java
+@@ -1,5 +1,6 @@
+ package net.minecraft.network.protocol.game;
+ 
++import io.papermc.paper.dimicraft.DimicraftCoordinateOffset;
+ import java.util.UUID;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.registries.Registries;
+@@ -96,9 +97,9 @@ public class ClientboundAddEntityPacket implements Packet<ClientGamePacketListen
+         this.id = input.readVarInt();
+         this.uuid = input.readUUID();
+         this.type = ByteBufCodecs.registry(Registries.ENTITY_TYPE).decode(input);
+-        this.x = input.readDouble();
++        this.x = DimicraftCoordinateOffset.toServerX(input.readDouble());
+         this.y = input.readDouble();
+-        this.z = input.readDouble();
++        this.z = DimicraftCoordinateOffset.toServerZ(input.readDouble());
+         this.movement = Vec3.LP_STREAM_CODEC.decode(input);
+         this.xRot = input.readByte();
+         this.yRot = input.readByte();
+@@ -110,9 +111,9 @@ public class ClientboundAddEntityPacket implements Packet<ClientGamePacketListen
+         output.writeVarInt(this.id);
+         output.writeUUID(this.uuid);
+         ByteBufCodecs.registry(Registries.ENTITY_TYPE).encode(output, this.type);
+-        output.writeDouble(this.x);
++        output.writeDouble(DimicraftCoordinateOffset.toClientX(this.x));
+         output.writeDouble(this.y);
+-        output.writeDouble(this.z);
++        output.writeDouble(DimicraftCoordinateOffset.toClientZ(this.z));
+         Vec3.LP_STREAM_CODEC.encode(output, this.movement);
+         output.writeByte(this.xRot);
+         output.writeByte(this.yRot);
+diff --git a/net/minecraft/network/protocol/game/ClientboundDamageEventPacket.java b/net/minecraft/network/protocol/game/ClientboundDamageEventPacket.java
+index fbb3c8a92a4f6a12fac98f860456c861eef0d461..fa73e3a7f81e235774922d2e173fdb075fbe250b 100644
+--- a/net/minecraft/network/protocol/game/ClientboundDamageEventPacket.java
++++ b/net/minecraft/network/protocol/game/ClientboundDamageEventPacket.java
+@@ -1,5 +1,6 @@
+ package net.minecraft.network.protocol.game;
+ 
++import io.papermc.paper.dimicraft.DimicraftCoordinateOffset;
+ import java.util.Optional;
+ import net.minecraft.core.Holder;
+ import net.minecraft.network.FriendlyByteBuf;
+@@ -35,7 +36,7 @@ public record ClientboundDamageEventPacket(int entityId, Holder<DamageType> sour
+             DamageType.STREAM_CODEC.decode(input),
+             readOptionalEntityId(input),
+             readOptionalEntityId(input),
+-            input.readOptional(i -> new Vec3(i.readDouble(), i.readDouble(), i.readDouble()))
++            input.readOptional(i -> new Vec3(DimicraftCoordinateOffset.toServerX(i.readDouble()), i.readDouble(), DimicraftCoordinateOffset.toServerZ(i.readDouble())))
+         );
+     }
+ 
+@@ -53,9 +54,9 @@ public record ClientboundDamageEventPacket(int entityId, Holder<DamageType> sour
+         writeOptionalEntityId(output, this.sourceCauseId);
+         writeOptionalEntityId(output, this.sourceDirectId);
+         output.writeOptional(this.sourcePosition, (o, pos) -> {
+-            o.writeDouble(pos.x());
++            o.writeDouble(DimicraftCoordinateOffset.toClientX(pos.x()));
+             o.writeDouble(pos.y());
+-            o.writeDouble(pos.z());
++            o.writeDouble(DimicraftCoordinateOffset.toClientZ(pos.z()));
+         });
+     }
+ 
+diff --git a/net/minecraft/network/protocol/game/ClientboundExplodePacket.java b/net/minecraft/network/protocol/game/ClientboundExplodePacket.java
+index 8358f24ed1646b138382b7aae71e4456f3208caf..5b0cafd998b4746d22fc095a3ad0c2b087225b03 100644
+--- a/net/minecraft/network/protocol/game/ClientboundExplodePacket.java
++++ b/net/minecraft/network/protocol/game/ClientboundExplodePacket.java
+@@ -1,12 +1,12 @@
+ package net.minecraft.network.protocol.game;
+ 
++import io.papermc.paper.dimicraft.DimicraftCoordinateOffset;
+ import java.util.Optional;
+ import net.minecraft.core.Holder;
+ import net.minecraft.core.particles.ExplosionParticleInfo;
+ import net.minecraft.core.particles.ParticleOptions;
+ import net.minecraft.core.particles.ParticleTypes;
+ import net.minecraft.network.RegistryFriendlyByteBuf;
+-import net.minecraft.network.codec.ByteBufCodecs;
+ import net.minecraft.network.codec.StreamCodec;
+ import net.minecraft.network.protocol.Packet;
+ import net.minecraft.network.protocol.PacketType;
+@@ -23,23 +23,33 @@ public record ClientboundExplodePacket(
+     Holder<SoundEvent> explosionSound,
+     WeightedList<ExplosionParticleInfo> blockParticles
+ ) implements Packet<ClientGamePacketListener> {
+-    public static final StreamCodec<RegistryFriendlyByteBuf, ClientboundExplodePacket> STREAM_CODEC = StreamCodec.composite(
+-        Vec3.STREAM_CODEC,
+-        ClientboundExplodePacket::center,
+-        ByteBufCodecs.FLOAT,
+-        ClientboundExplodePacket::radius,
+-        ByteBufCodecs.INT,
+-        ClientboundExplodePacket::blockCount,
+-        Vec3.STREAM_CODEC.apply(ByteBufCodecs::optional),
+-        ClientboundExplodePacket::playerKnockback,
+-        ParticleTypes.STREAM_CODEC,
+-        ClientboundExplodePacket::explosionParticle,
+-        SoundEvent.STREAM_CODEC,
+-        ClientboundExplodePacket::explosionSound,
+-        WeightedList.streamCodec(ExplosionParticleInfo.STREAM_CODEC),
+-        ClientboundExplodePacket::blockParticles,
+-        ClientboundExplodePacket::new
++    private static final StreamCodec<RegistryFriendlyByteBuf, WeightedList<ExplosionParticleInfo>> BLOCK_PARTICLES_STREAM_CODEC = WeightedList.streamCodec(
++        ExplosionParticleInfo.STREAM_CODEC
+     );
++    public static final StreamCodec<RegistryFriendlyByteBuf, ClientboundExplodePacket> STREAM_CODEC = Packet.codec(
++        ClientboundExplodePacket::write, ClientboundExplodePacket::read
++    );
++
++    private static ClientboundExplodePacket read(final RegistryFriendlyByteBuf input) {
++        Vec3 center = DimicraftCoordinateOffset.toServerPosition(Vec3.STREAM_CODEC.decode(input));
++        float radius = input.readFloat();
++        int blockCount = input.readInt();
++        Optional<Vec3> playerKnockback = input.readOptional(Vec3.STREAM_CODEC::decode);
++        ParticleOptions explosionParticle = ParticleTypes.STREAM_CODEC.decode(input);
++        Holder<SoundEvent> explosionSound = SoundEvent.STREAM_CODEC.decode(input);
++        WeightedList<ExplosionParticleInfo> blockParticles = BLOCK_PARTICLES_STREAM_CODEC.decode(input);
++        return new ClientboundExplodePacket(center, radius, blockCount, playerKnockback, explosionParticle, explosionSound, blockParticles);
++    }
++
++    private void write(final RegistryFriendlyByteBuf output) {
++        Vec3.STREAM_CODEC.encode(output, DimicraftCoordinateOffset.toClientPosition(this.center));
++        output.writeFloat(this.radius);
++        output.writeInt(this.blockCount);
++        output.writeOptional(this.playerKnockback, (o, pos) -> Vec3.STREAM_CODEC.encode(o, pos));
++        ParticleTypes.STREAM_CODEC.encode(output, this.explosionParticle);
++        SoundEvent.STREAM_CODEC.encode(output, this.explosionSound);
++        BLOCK_PARTICLES_STREAM_CODEC.encode(output, this.blockParticles);
++    }
+ 
+     @Override
+     public PacketType<ClientboundExplodePacket> type() {
+diff --git a/net/minecraft/network/protocol/game/ClientboundInitializeBorderPacket.java b/net/minecraft/network/protocol/game/ClientboundInitializeBorderPacket.java
+index 77276fef40271afa4b5ebafed259fbb55bbd30eb..3d77952789e803aaa5e223fc6b8074a0a1cea160 100644
+--- a/net/minecraft/network/protocol/game/ClientboundInitializeBorderPacket.java
++++ b/net/minecraft/network/protocol/game/ClientboundInitializeBorderPacket.java
+@@ -1,5 +1,6 @@
+ package net.minecraft.network.protocol.game;
+ 
++import io.papermc.paper.dimicraft.DimicraftCoordinateOffset;
+ import net.minecraft.network.FriendlyByteBuf;
+ import net.minecraft.network.codec.StreamCodec;
+ import net.minecraft.network.protocol.Packet;
+@@ -20,8 +21,8 @@ public class ClientboundInitializeBorderPacket implements Packet<ClientGamePacke
+     private final int warningTime;
+ 
+     private ClientboundInitializeBorderPacket(final FriendlyByteBuf input) {
+-        this.newCenterX = input.readDouble();
+-        this.newCenterZ = input.readDouble();
++        this.newCenterX = DimicraftCoordinateOffset.toServerX(input.readDouble());
++        this.newCenterZ = DimicraftCoordinateOffset.toServerZ(input.readDouble());
+         this.oldSize = input.readDouble();
+         this.newSize = input.readDouble();
+         this.lerpTime = input.readVarLong();
+@@ -42,8 +43,8 @@ public class ClientboundInitializeBorderPacket implements Packet<ClientGamePacke
+     }
+ 
+     private void write(final FriendlyByteBuf output) {
+-        output.writeDouble(this.newCenterX);
+-        output.writeDouble(this.newCenterZ);
++        output.writeDouble(DimicraftCoordinateOffset.toClientX(this.newCenterX));
++        output.writeDouble(DimicraftCoordinateOffset.toClientZ(this.newCenterZ));
+         output.writeDouble(this.oldSize);
+         output.writeDouble(this.newSize);
+         output.writeVarLong(this.lerpTime);
+diff --git a/net/minecraft/network/protocol/game/ClientboundLevelChunkWithLightPacket.java b/net/minecraft/network/protocol/game/ClientboundLevelChunkWithLightPacket.java
+index be8ba1425b55a4948afb3f86c0feb3e2b1c2b561..f9642f92c03de544337883a11e5410371bc6ed3a 100644
+--- a/net/minecraft/network/protocol/game/ClientboundLevelChunkWithLightPacket.java
++++ b/net/minecraft/network/protocol/game/ClientboundLevelChunkWithLightPacket.java
+@@ -1,5 +1,6 @@
+ package net.minecraft.network.protocol.game;
+ 
++import io.papermc.paper.dimicraft.DimicraftCoordinateOffset;
+ import java.util.BitSet;
+ import net.minecraft.network.RegistryFriendlyByteBuf;
+ import net.minecraft.network.codec.StreamCodec;
+@@ -38,15 +39,15 @@ public class ClientboundLevelChunkWithLightPacket implements Packet<ClientGamePa
+     }
+ 
+     private ClientboundLevelChunkWithLightPacket(final RegistryFriendlyByteBuf input) {
+-        this.x = input.readInt();
+-        this.z = input.readInt();
++        this.x = DimicraftCoordinateOffset.toServerChunkX(input.readInt());
++        this.z = DimicraftCoordinateOffset.toServerChunkZ(input.readInt());
+         this.chunkData = new ClientboundLevelChunkPacketData(input, this.x, this.z);
+         this.lightData = new ClientboundLightUpdatePacketData(input, this.x, this.z);
+     }
+ 
+     private void write(final RegistryFriendlyByteBuf output) {
+-        output.writeInt(this.x);
+-        output.writeInt(this.z);
++        output.writeInt(DimicraftCoordinateOffset.toClientChunkX(this.x));
++        output.writeInt(DimicraftCoordinateOffset.toClientChunkZ(this.z));
+         this.chunkData.write(output);
+         this.lightData.write(output);
+     }
+diff --git a/net/minecraft/network/protocol/game/ClientboundLevelParticlesPacket.java b/net/minecraft/network/protocol/game/ClientboundLevelParticlesPacket.java
+index 65973f12d7f6e9084b6bd8c0ba6411f66b6ef3eb..0a7e6cb751f538d84acdb72a306840f9ee69ad52 100644
+--- a/net/minecraft/network/protocol/game/ClientboundLevelParticlesPacket.java
++++ b/net/minecraft/network/protocol/game/ClientboundLevelParticlesPacket.java
+@@ -1,5 +1,6 @@
+ package net.minecraft.network.protocol.game;
+ 
++import io.papermc.paper.dimicraft.DimicraftCoordinateOffset;
+ import net.minecraft.core.particles.ParticleOptions;
+ import net.minecraft.core.particles.ParticleTypes;
+ import net.minecraft.network.RegistryFriendlyByteBuf;
+@@ -52,9 +53,9 @@ public class ClientboundLevelParticlesPacket implements Packet<ClientGamePacketL
+     private ClientboundLevelParticlesPacket(final RegistryFriendlyByteBuf input) {
+         this.overrideLimiter = input.readBoolean();
+         this.alwaysShow = input.readBoolean();
+-        this.x = input.readDouble();
++        this.x = DimicraftCoordinateOffset.toServerX(input.readDouble());
+         this.y = input.readDouble();
+-        this.z = input.readDouble();
++        this.z = DimicraftCoordinateOffset.toServerZ(input.readDouble());
+         this.xDist = input.readFloat();
+         this.yDist = input.readFloat();
+         this.zDist = input.readFloat();
+@@ -66,9 +67,9 @@ public class ClientboundLevelParticlesPacket implements Packet<ClientGamePacketL
+     private void write(final RegistryFriendlyByteBuf output) {
+         output.writeBoolean(this.overrideLimiter);
+         output.writeBoolean(this.alwaysShow);
+-        output.writeDouble(this.x);
++        output.writeDouble(DimicraftCoordinateOffset.toClientX(this.x));
+         output.writeDouble(this.y);
+-        output.writeDouble(this.z);
++        output.writeDouble(DimicraftCoordinateOffset.toClientZ(this.z));
+         output.writeFloat(this.xDist);
+         output.writeFloat(this.yDist);
+         output.writeFloat(this.zDist);
+diff --git a/net/minecraft/network/protocol/game/ClientboundLightUpdatePacket.java b/net/minecraft/network/protocol/game/ClientboundLightUpdatePacket.java
+index b6cd50dfa402223ffa0867bfd66a6b72e1caed2e..f9aa6d0d5a1f78aee05275d8157961c5b5e01a1c 100644
+--- a/net/minecraft/network/protocol/game/ClientboundLightUpdatePacket.java
++++ b/net/minecraft/network/protocol/game/ClientboundLightUpdatePacket.java
+@@ -1,5 +1,6 @@
+ package net.minecraft.network.protocol.game;
+ 
++import io.papermc.paper.dimicraft.DimicraftCoordinateOffset;
+ import java.util.BitSet;
+ import net.minecraft.network.FriendlyByteBuf;
+ import net.minecraft.network.codec.StreamCodec;
+@@ -29,14 +30,14 @@ public class ClientboundLightUpdatePacket implements Packet<ClientGamePacketList
+     }
+ 
+     private ClientboundLightUpdatePacket(final FriendlyByteBuf input) {
+-        this.x = input.readVarInt();
+-        this.z = input.readVarInt();
++        this.x = DimicraftCoordinateOffset.toServerChunkX(input.readVarInt());
++        this.z = DimicraftCoordinateOffset.toServerChunkZ(input.readVarInt());
+         this.lightData = new ClientboundLightUpdatePacketData(input, this.x, this.z);
+     }
+ 
+     private void write(final FriendlyByteBuf output) {
+-        output.writeVarInt(this.x);
+-        output.writeVarInt(this.z);
++        output.writeVarInt(DimicraftCoordinateOffset.toClientChunkX(this.x));
++        output.writeVarInt(DimicraftCoordinateOffset.toClientChunkZ(this.z));
+         this.lightData.write(output);
+     }
+ 
+diff --git a/net/minecraft/network/protocol/game/ClientboundMoveVehiclePacket.java b/net/minecraft/network/protocol/game/ClientboundMoveVehiclePacket.java
+index 2e62cd834b26c9501a65ee5b7417f98d1581d440..732f16aeaeae797169ec49d969b91291475243c7 100644
+--- a/net/minecraft/network/protocol/game/ClientboundMoveVehiclePacket.java
++++ b/net/minecraft/network/protocol/game/ClientboundMoveVehiclePacket.java
+@@ -1,7 +1,7 @@
+ package net.minecraft.network.protocol.game;
+ 
++import io.papermc.paper.dimicraft.DimicraftCoordinateOffset;
+ import net.minecraft.network.FriendlyByteBuf;
+-import net.minecraft.network.codec.ByteBufCodecs;
+ import net.minecraft.network.codec.StreamCodec;
+ import net.minecraft.network.protocol.Packet;
+ import net.minecraft.network.protocol.PacketType;
+@@ -9,16 +9,23 @@ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.phys.Vec3;
+ 
+ public record ClientboundMoveVehiclePacket(Vec3 position, float yRot, float xRot) implements Packet<ClientGamePacketListener> {
+-    public static final StreamCodec<FriendlyByteBuf, ClientboundMoveVehiclePacket> STREAM_CODEC = StreamCodec.composite(
+-        Vec3.STREAM_CODEC,
+-        ClientboundMoveVehiclePacket::position,
+-        ByteBufCodecs.FLOAT,
+-        ClientboundMoveVehiclePacket::yRot,
+-        ByteBufCodecs.FLOAT,
+-        ClientboundMoveVehiclePacket::xRot,
+-        ClientboundMoveVehiclePacket::new
++    public static final StreamCodec<FriendlyByteBuf, ClientboundMoveVehiclePacket> STREAM_CODEC = Packet.codec(
++        ClientboundMoveVehiclePacket::write, ClientboundMoveVehiclePacket::read
+     );
+ 
++    private static ClientboundMoveVehiclePacket read(final FriendlyByteBuf input) {
++        Vec3 position = DimicraftCoordinateOffset.toServerPosition(Vec3.STREAM_CODEC.decode(input));
++        float yRot = input.readFloat();
++        float xRot = input.readFloat();
++        return new ClientboundMoveVehiclePacket(position, yRot, xRot);
++    }
++
++    private void write(final FriendlyByteBuf output) {
++        Vec3.STREAM_CODEC.encode(output, DimicraftCoordinateOffset.toClientPosition(this.position));
++        output.writeFloat(this.yRot);
++        output.writeFloat(this.xRot);
++    }
++
+     public static ClientboundMoveVehiclePacket fromEntity(final Entity entity) {
+         return new ClientboundMoveVehiclePacket(entity.position(), entity.getYRot(), entity.getXRot());
+     }
+diff --git a/net/minecraft/network/protocol/game/ClientboundPlayerLookAtPacket.java b/net/minecraft/network/protocol/game/ClientboundPlayerLookAtPacket.java
+index 72be59be447bd33577bb086680a3d735527d8ac3..12f03528d3d0a8fb3d7baf34dbc3c7eab6e446af 100644
+--- a/net/minecraft/network/protocol/game/ClientboundPlayerLookAtPacket.java
++++ b/net/minecraft/network/protocol/game/ClientboundPlayerLookAtPacket.java
+@@ -1,5 +1,6 @@
+ package net.minecraft.network.protocol.game;
+ 
++import io.papermc.paper.dimicraft.DimicraftCoordinateOffset;
+ import net.minecraft.commands.arguments.EntityAnchorArgument;
+ import net.minecraft.network.FriendlyByteBuf;
+ import net.minecraft.network.codec.StreamCodec;
+@@ -45,9 +46,9 @@ public class ClientboundPlayerLookAtPacket implements Packet<ClientGamePacketLis
+ 
+     private ClientboundPlayerLookAtPacket(final FriendlyByteBuf input) {
+         this.fromAnchor = input.readEnum(EntityAnchorArgument.Anchor.class);
+-        this.x = input.readDouble();
++        this.x = DimicraftCoordinateOffset.toServerX(input.readDouble());
+         this.y = input.readDouble();
+-        this.z = input.readDouble();
++        this.z = DimicraftCoordinateOffset.toServerZ(input.readDouble());
+         this.atEntity = input.readBoolean();
+         if (this.atEntity) {
+             this.entity = input.readVarInt();
+@@ -60,9 +61,9 @@ public class ClientboundPlayerLookAtPacket implements Packet<ClientGamePacketLis
+ 
+     private void write(final FriendlyByteBuf output) {
+         output.writeEnum(this.fromAnchor);
+-        output.writeDouble(this.x);
++        output.writeDouble(DimicraftCoordinateOffset.toClientX(this.x));
+         output.writeDouble(this.y);
+-        output.writeDouble(this.z);
++        output.writeDouble(DimicraftCoordinateOffset.toClientZ(this.z));
+         output.writeBoolean(this.atEntity);
+         if (this.atEntity) {
+             output.writeVarInt(this.entity);
+diff --git a/net/minecraft/network/protocol/game/ClientboundSetBorderCenterPacket.java b/net/minecraft/network/protocol/game/ClientboundSetBorderCenterPacket.java
+index 5652866fe2f287a80da2d7765b6bdc0bb289bf46..338af0cb58f0a5043f9e48a342e675d818f3445b 100644
+--- a/net/minecraft/network/protocol/game/ClientboundSetBorderCenterPacket.java
++++ b/net/minecraft/network/protocol/game/ClientboundSetBorderCenterPacket.java
+@@ -1,5 +1,6 @@
+ package net.minecraft.network.protocol.game;
+ 
++import io.papermc.paper.dimicraft.DimicraftCoordinateOffset;
+ import net.minecraft.network.FriendlyByteBuf;
+ import net.minecraft.network.codec.StreamCodec;
+ import net.minecraft.network.protocol.Packet;
+@@ -19,13 +20,13 @@ public class ClientboundSetBorderCenterPacket implements Packet<ClientGamePacket
+     }
+ 
+     private ClientboundSetBorderCenterPacket(final FriendlyByteBuf input) {
+-        this.newCenterX = input.readDouble();
+-        this.newCenterZ = input.readDouble();
++        this.newCenterX = DimicraftCoordinateOffset.toServerX(input.readDouble());
++        this.newCenterZ = DimicraftCoordinateOffset.toServerZ(input.readDouble());
+     }
+ 
+     private void write(final FriendlyByteBuf output) {
+-        output.writeDouble(this.newCenterX);
+-        output.writeDouble(this.newCenterZ);
++        output.writeDouble(DimicraftCoordinateOffset.toClientX(this.newCenterX));
++        output.writeDouble(DimicraftCoordinateOffset.toClientZ(this.newCenterZ));
+     }
+ 
+     @Override
+diff --git a/net/minecraft/network/protocol/game/ClientboundSetChunkCacheCenterPacket.java b/net/minecraft/network/protocol/game/ClientboundSetChunkCacheCenterPacket.java
+index 6db200daaea3fc72f58422c704dd3f6aec5e5f5d..ef2fd8bd1bdcf9a87b476567222462b76c6b35d6 100644
+--- a/net/minecraft/network/protocol/game/ClientboundSetChunkCacheCenterPacket.java
++++ b/net/minecraft/network/protocol/game/ClientboundSetChunkCacheCenterPacket.java
+@@ -1,5 +1,6 @@
+ package net.minecraft.network.protocol.game;
+ 
++import io.papermc.paper.dimicraft.DimicraftCoordinateOffset;
+ import net.minecraft.network.FriendlyByteBuf;
+ import net.minecraft.network.codec.StreamCodec;
+ import net.minecraft.network.protocol.Packet;
+@@ -18,13 +19,13 @@ public class ClientboundSetChunkCacheCenterPacket implements Packet<ClientGamePa
+     }
+ 
+     private ClientboundSetChunkCacheCenterPacket(final FriendlyByteBuf input) {
+-        this.x = input.readVarInt();
+-        this.z = input.readVarInt();
++        this.x = DimicraftCoordinateOffset.toServerChunkX(input.readVarInt());
++        this.z = DimicraftCoordinateOffset.toServerChunkZ(input.readVarInt());
+     }
+ 
+     private void write(final FriendlyByteBuf output) {
+-        output.writeVarInt(this.x);
+-        output.writeVarInt(this.z);
++        output.writeVarInt(DimicraftCoordinateOffset.toClientChunkX(this.x));
++        output.writeVarInt(DimicraftCoordinateOffset.toClientChunkZ(this.z));
+     }
+ 
+     @Override
+diff --git a/net/minecraft/network/protocol/game/ClientboundSoundPacket.java b/net/minecraft/network/protocol/game/ClientboundSoundPacket.java
+index 23f17c7e4020f552569a739f8eae5132e16a72fa..ba6015f30bacba251a2ba8e5db78c77e262ca628 100644
+--- a/net/minecraft/network/protocol/game/ClientboundSoundPacket.java
++++ b/net/minecraft/network/protocol/game/ClientboundSoundPacket.java
+@@ -1,5 +1,6 @@
+ package net.minecraft.network.protocol.game;
+ 
++import io.papermc.paper.dimicraft.DimicraftCoordinateOffset;
+ import net.minecraft.core.Holder;
+ import net.minecraft.network.RegistryFriendlyByteBuf;
+ import net.minecraft.network.codec.StreamCodec;
+@@ -45,9 +46,9 @@ public class ClientboundSoundPacket implements Packet<ClientGamePacketListener>
+     private ClientboundSoundPacket(final RegistryFriendlyByteBuf input) {
+         this.sound = SoundEvent.STREAM_CODEC.decode(input);
+         this.source = input.readEnum(SoundSource.class);
+-        this.x = input.readInt();
++        this.x = DimicraftCoordinateOffset.toServerSoundX(input.readInt());
+         this.y = input.readInt();
+-        this.z = input.readInt();
++        this.z = DimicraftCoordinateOffset.toServerSoundZ(input.readInt());
+         this.volume = input.readFloat();
+         this.pitch = input.readFloat();
+         this.seed = input.readLong();
+@@ -56,9 +57,9 @@ public class ClientboundSoundPacket implements Packet<ClientGamePacketListener>
+     private void write(final RegistryFriendlyByteBuf output) {
+         SoundEvent.STREAM_CODEC.encode(output, this.sound);
+         output.writeEnum(this.source);
+-        output.writeInt(this.x);
++        output.writeInt(DimicraftCoordinateOffset.toClientSoundX(this.x));
+         output.writeInt(this.y);
+-        output.writeInt(this.z);
++        output.writeInt(DimicraftCoordinateOffset.toClientSoundZ(this.z));
+         output.writeFloat(this.volume);
+         output.writeFloat(this.pitch);
+         output.writeLong(this.seed);
+diff --git a/net/minecraft/network/protocol/game/ServerboundMovePlayerPacket.java b/net/minecraft/network/protocol/game/ServerboundMovePlayerPacket.java
+index e712913a8dfc59a25a75ca38cb65f25795086eaf..2087392f2b1449c88fe06249bc038c61621f6274 100644
+--- a/net/minecraft/network/protocol/game/ServerboundMovePlayerPacket.java
++++ b/net/minecraft/network/protocol/game/ServerboundMovePlayerPacket.java
+@@ -1,5 +1,6 @@
+ package net.minecraft.network.protocol.game;
+ 
++import io.papermc.paper.dimicraft.DimicraftCoordinateOffset;
+ import net.minecraft.network.FriendlyByteBuf;
+ import net.minecraft.network.codec.StreamCodec;
+ import net.minecraft.network.protocol.Packet;
+@@ -120,9 +121,9 @@ public abstract class ServerboundMovePlayerPacket implements Packet<ServerGamePa
+         }
+ 
+         private static ServerboundMovePlayerPacket.Pos read(final FriendlyByteBuf input) {
+-            double x = input.readDouble();
++            double x = DimicraftCoordinateOffset.toServerX(input.readDouble());
+             double y = input.readDouble();
+-            double z = input.readDouble();
++            double z = DimicraftCoordinateOffset.toServerZ(input.readDouble());
+             short flags = input.readUnsignedByte();
+             boolean onGround = ServerboundMovePlayerPacket.unpackOnGround(flags);
+             boolean horizontalCollision = ServerboundMovePlayerPacket.unpackHorizontalCollision(flags);
+@@ -130,9 +131,9 @@ public abstract class ServerboundMovePlayerPacket implements Packet<ServerGamePa
+         }
+ 
+         private void write(final FriendlyByteBuf output) {
+-            output.writeDouble(this.x);
++            output.writeDouble(DimicraftCoordinateOffset.toClientX(this.x));
+             output.writeDouble(this.y);
+-            output.writeDouble(this.z);
++            output.writeDouble(DimicraftCoordinateOffset.toClientZ(this.z));
+             output.writeByte(ServerboundMovePlayerPacket.packFlags(this.onGround, this.horizontalCollision));
+         }
+ 
+@@ -158,9 +159,9 @@ public abstract class ServerboundMovePlayerPacket implements Packet<ServerGamePa
+         }
+ 
+         private static ServerboundMovePlayerPacket.PosRot read(final FriendlyByteBuf input) {
+-            double x = input.readDouble();
++            double x = DimicraftCoordinateOffset.toServerX(input.readDouble());
+             double y = input.readDouble();
+-            double z = input.readDouble();
++            double z = DimicraftCoordinateOffset.toServerZ(input.readDouble());
+             float yRot = input.readFloat();
+             float xRot = input.readFloat();
+             short flags = input.readUnsignedByte();
+@@ -170,9 +171,9 @@ public abstract class ServerboundMovePlayerPacket implements Packet<ServerGamePa
+         }
+ 
+         private void write(final FriendlyByteBuf output) {
+-            output.writeDouble(this.x);
++            output.writeDouble(DimicraftCoordinateOffset.toClientX(this.x));
+             output.writeDouble(this.y);
+-            output.writeDouble(this.z);
++            output.writeDouble(DimicraftCoordinateOffset.toClientZ(this.z));
+             output.writeFloat(this.yRot);
+             output.writeFloat(this.xRot);
+             output.writeByte(ServerboundMovePlayerPacket.packFlags(this.onGround, this.horizontalCollision));
+diff --git a/net/minecraft/network/protocol/game/ServerboundMoveVehiclePacket.java b/net/minecraft/network/protocol/game/ServerboundMoveVehiclePacket.java
+index 27403c671d8b6f82bce593ec26586bbf3aad91a1..2cf5008af682500b7132a1ecb123c4446b13973b 100644
+--- a/net/minecraft/network/protocol/game/ServerboundMoveVehiclePacket.java
++++ b/net/minecraft/network/protocol/game/ServerboundMoveVehiclePacket.java
+@@ -1,7 +1,7 @@
+ package net.minecraft.network.protocol.game;
+ 
++import io.papermc.paper.dimicraft.DimicraftCoordinateOffset;
+ import net.minecraft.network.FriendlyByteBuf;
+-import net.minecraft.network.codec.ByteBufCodecs;
+ import net.minecraft.network.codec.StreamCodec;
+ import net.minecraft.network.protocol.Packet;
+ import net.minecraft.network.protocol.PacketType;
+@@ -9,18 +9,25 @@ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.phys.Vec3;
+ 
+ public record ServerboundMoveVehiclePacket(Vec3 position, float yRot, float xRot, boolean onGround) implements Packet<ServerGamePacketListener> {
+-    public static final StreamCodec<FriendlyByteBuf, ServerboundMoveVehiclePacket> STREAM_CODEC = StreamCodec.composite(
+-        Vec3.STREAM_CODEC,
+-        ServerboundMoveVehiclePacket::position,
+-        ByteBufCodecs.FLOAT,
+-        ServerboundMoveVehiclePacket::yRot,
+-        ByteBufCodecs.FLOAT,
+-        ServerboundMoveVehiclePacket::xRot,
+-        ByteBufCodecs.BOOL,
+-        ServerboundMoveVehiclePacket::onGround,
+-        ServerboundMoveVehiclePacket::new
++    public static final StreamCodec<FriendlyByteBuf, ServerboundMoveVehiclePacket> STREAM_CODEC = Packet.codec(
++        ServerboundMoveVehiclePacket::write, ServerboundMoveVehiclePacket::read
+     );
+ 
++    private static ServerboundMoveVehiclePacket read(final FriendlyByteBuf input) {
++        Vec3 position = DimicraftCoordinateOffset.toServerPosition(Vec3.STREAM_CODEC.decode(input));
++        float yRot = input.readFloat();
++        float xRot = input.readFloat();
++        boolean onGround = input.readBoolean();
++        return new ServerboundMoveVehiclePacket(position, yRot, xRot, onGround);
++    }
++
++    private void write(final FriendlyByteBuf output) {
++        Vec3.STREAM_CODEC.encode(output, DimicraftCoordinateOffset.toClientPosition(this.position));
++        output.writeFloat(this.yRot);
++        output.writeFloat(this.xRot);
++        output.writeBoolean(this.onGround);
++    }
++
+     public static ServerboundMoveVehiclePacket fromEntity(final Entity entity) {
+         return entity.isInterpolating()
+             ? new ServerboundMoveVehiclePacket(
+diff --git a/net/minecraft/world/entity/PositionMoveRotation.java b/net/minecraft/world/entity/PositionMoveRotation.java
+index d0a2ae3f648a3636423480d91b7f7ad03da26132..23c527b11c80d97a50dcc95b9741d5312c5c7f35 100644
+--- a/net/minecraft/world/entity/PositionMoveRotation.java
++++ b/net/minecraft/world/entity/PositionMoveRotation.java
+@@ -1,25 +1,32 @@
+ package net.minecraft.world.entity;
+ 
++import io.papermc.paper.dimicraft.DimicraftCoordinateOffset;
+ import java.util.Set;
+ import net.minecraft.network.FriendlyByteBuf;
+-import net.minecraft.network.codec.ByteBufCodecs;
+ import net.minecraft.network.codec.StreamCodec;
+ import net.minecraft.util.Mth;
+ import net.minecraft.world.level.portal.TeleportTransition;
+ import net.minecraft.world.phys.Vec3;
+ 
+ public record PositionMoveRotation(Vec3 position, Vec3 deltaMovement, float yRot, float xRot) {
+-    public static final StreamCodec<FriendlyByteBuf, PositionMoveRotation> STREAM_CODEC = StreamCodec.composite(
+-        Vec3.STREAM_CODEC,
+-        PositionMoveRotation::position,
+-        Vec3.STREAM_CODEC,
+-        PositionMoveRotation::deltaMovement,
+-        ByteBufCodecs.FLOAT,
+-        PositionMoveRotation::yRot,
+-        ByteBufCodecs.FLOAT,
+-        PositionMoveRotation::xRot,
+-        PositionMoveRotation::new
+-    );
++    public static final StreamCodec<FriendlyByteBuf, PositionMoveRotation> STREAM_CODEC = new StreamCodec<FriendlyByteBuf, PositionMoveRotation>() {
++        @Override
++        public PositionMoveRotation decode(final FriendlyByteBuf input) {
++            Vec3 position = DimicraftCoordinateOffset.toServerPosition(Vec3.STREAM_CODEC.decode(input));
++            Vec3 deltaMovement = Vec3.STREAM_CODEC.decode(input);
++            float yRot = input.readFloat();
++            float xRot = input.readFloat();
++            return new PositionMoveRotation(position, deltaMovement, yRot, xRot);
++        }
++
++        @Override
++        public void encode(final FriendlyByteBuf output, final PositionMoveRotation value) {
++            Vec3.STREAM_CODEC.encode(output, DimicraftCoordinateOffset.toClientPosition(value.position()));
++            Vec3.STREAM_CODEC.encode(output, value.deltaMovement());
++            output.writeFloat(value.yRot());
++            output.writeFloat(value.xRot());
++        }
++    };
+ 
+     public static PositionMoveRotation of(final Entity entity) {
+         return entity.isInterpolating()
