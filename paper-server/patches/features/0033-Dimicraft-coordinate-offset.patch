@@ -47,6 +47,9 @@ index 0000000..ecb62db
 +import java.util.concurrent.ConcurrentMap;
 +
 +public final class DimicraftCoordinateOffset {
++    public static final io.netty.util.AttributeKey<net.minecraft.network.Connection> CONNECTION_ATTRIBUTE =
++        io.netty.util.AttributeKey.valueOf("dimigot:connection");
++
 +    private static final String ENABLED_PROPERTY = "dimicraft.coordinateOffset.enabled";
 +    private static final String X_PROPERTY = "dimicraft.coordinateOffset.x";
 +    private static final String Z_PROPERTY = "dimicraft.coordinateOffset.z";
@@ -345,7 +348,6 @@ index 13faa13..d1b729d 100644
      public static final Marker PACKET_MARKER = Util.make(MarkerFactory.getMarker("NETWORK_PACKETS"), m -> m.add(ROOT_MARKER));
      public static final Marker PACKET_RECEIVED_MARKER = Util.make(MarkerFactory.getMarker("PACKET_RECEIVED"), m -> m.add(PACKET_MARKER));
      public static final Marker PACKET_SENT_MARKER = Util.make(MarkerFactory.getMarker("PACKET_SENT"), m -> m.add(PACKET_MARKER));
-+    public static final io.netty.util.AttributeKey<Connection> DIMICRAFT_CONNECTION_ATTRIBUTE = io.netty.util.AttributeKey.valueOf("dimigot:connection");
      private static final ProtocolInfo<ServerHandshakePacketListener> INITIAL_PROTOCOL = HandshakeProtocols.SERVERBOUND;
      private final PacketFlow receiving;
      private volatile boolean sendLoginDisconnect = true;
@@ -353,7 +355,7 @@ index 13faa13..d1b729d 100644
          super.channelActive(ctx);
          this.channel = ctx.channel();
          this.address = this.channel.remoteAddress();
-+        this.channel.attr(DIMICRAFT_CONNECTION_ATTRIBUTE).set(this);
++        this.channel.attr(io.papermc.paper.dimicraft.DimicraftCoordinateOffset.CONNECTION_ATTRIBUTE).set(this);
          this.preparing = false; // Spigot
          if (this.delayedDisconnect != null) {
              this.disconnect(this.delayedDisconnect);
@@ -361,7 +363,7 @@ index 13faa13..d1b729d 100644
      }
  
      public void configurePacketHandler(final ChannelPipeline pipeline) {
-+        pipeline.channel().attr(DIMICRAFT_CONNECTION_ATTRIBUTE).set(this);
++        pipeline.channel().attr(io.papermc.paper.dimicraft.DimicraftCoordinateOffset.CONNECTION_ATTRIBUTE).set(this);
          pipeline.addLast("hackfix", new ChannelOutboundHandlerAdapter() {
              @Override
              public void write(final ChannelHandlerContext ctx, final Object msg, final ChannelPromise promise) throws Exception {
@@ -511,7 +513,7 @@ index 662c750..9c9284f 100644
  
 -        ProtocolSwapHandler.handleInboundTerminalPacket(ctx, packet);
 +    private static java.util.UUID dimicraftPlayerId(final ChannelHandlerContext ctx) {
-+        Connection connection = ctx.channel().attr(Connection.DIMICRAFT_CONNECTION_ATTRIBUTE).get();
++        Connection connection = ctx.channel().attr(io.papermc.paper.dimicraft.DimicraftCoordinateOffset.CONNECTION_ATTRIBUTE).get();
 +        net.minecraft.server.level.ServerPlayer player = connection == null ? null : connection.getPlayer();
 +        return player == null ? null : player.getUUID();
      }
@@ -541,7 +543,7 @@ index 27316db..b332fe0 100644
      }
  
 +    private static java.util.UUID dimicraftPlayerId(final ChannelHandlerContext ctx) {
-+        Connection connection = ctx.channel().attr(Connection.DIMICRAFT_CONNECTION_ATTRIBUTE).get();
++        Connection connection = ctx.channel().attr(io.papermc.paper.dimicraft.DimicraftCoordinateOffset.CONNECTION_ATTRIBUTE).get();
 +        net.minecraft.server.level.ServerPlayer player = connection == null ? null : connection.getPlayer();
 +        return player == null ? null : player.getUUID();
 +    }
