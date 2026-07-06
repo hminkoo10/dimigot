@@ -3,13 +3,37 @@ From: =?UTF-8?q?=EA=B5=AC=ED=98=84=EB=AF=BC?= <hminkoo10@isolvitm.goe.go.kr>
 Date: Mon, 6 Jul 2026 09:47:03 +0900
 Subject: [PATCH] Dimicraft coordinate offset
 
+---
+ .../dimicraft/DimicraftCoordinateOffset.java  | 272 ++++++++++++++++++
+ net/minecraft/core/SectionPos.java            |  14 +-
+ net/minecraft/network/Connection.java         |   3 +
+ net/minecraft/network/FriendlyByteBuf.java    |  13 +-
+ net/minecraft/network/PacketDecoder.java      |  83 +++---
+ net/minecraft/network/PacketEncoder.java      |   8 +
+ .../game/ClientboundAddEntityPacket.java      |   9 +-
+ .../game/ClientboundDamageEventPacket.java    |   7 +-
+ .../game/ClientboundExplodePacket.java        |  44 +--
+ .../ClientboundInitializeBorderPacket.java    |   9 +-
+ .../ClientboundLevelChunkWithLightPacket.java |   9 +-
+ .../game/ClientboundLevelParticlesPacket.java |   9 +-
+ .../game/ClientboundLightUpdatePacket.java    |   9 +-
+ .../game/ClientboundMoveVehiclePacket.java    |  25 +-
+ .../game/ClientboundPlayerLookAtPacket.java   |   9 +-
+ .../ClientboundSetBorderCenterPacket.java     |   9 +-
+ .../ClientboundSetChunkCacheCenterPacket.java |   9 +-
+ .../protocol/game/ClientboundSoundPacket.java |   9 +-
+ .../game/ServerboundMovePlayerPacket.java     |  17 +-
+ .../game/ServerboundMoveVehiclePacket.java    |  29 +-
+ .../world/entity/PositionMoveRotation.java    |  31 +-
+ 21 files changed, 487 insertions(+), 140 deletions(-)
+ create mode 100644 io/papermc/paper/dimicraft/DimicraftCoordinateOffset.java
 
 diff --git a/io/papermc/paper/dimicraft/DimicraftCoordinateOffset.java b/io/papermc/paper/dimicraft/DimicraftCoordinateOffset.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..23fbb219fc1bcfb8a14925b788d4dd776b8f1b21
+index 0000000..6a69dbc
 --- /dev/null
 +++ b/io/papermc/paper/dimicraft/DimicraftCoordinateOffset.java
-@@ -0,0 +1,184 @@
+@@ -0,0 +1,272 @@
 +package io.papermc.paper.dimicraft;
 +
 +import net.minecraft.core.BlockPos;
@@ -17,22 +41,31 @@ index 0000000000000000000000000000000000000000..23fbb219fc1bcfb8a14925b788d4dd77
 +import net.minecraft.world.level.ChunkPos;
 +import net.minecraft.world.phys.Vec3;
 +
++import java.nio.charset.StandardCharsets;
++import java.security.MessageDigest;
++import java.security.NoSuchAlgorithmException;
++import java.util.UUID;
++import java.util.concurrent.ConcurrentHashMap;
++import java.util.concurrent.ConcurrentMap;
++
 +public final class DimicraftCoordinateOffset {
 +    private static final String ENABLED_PROPERTY = "dimicraft.coordinateOffset.enabled";
 +    private static final String X_PROPERTY = "dimicraft.coordinateOffset.x";
 +    private static final String Z_PROPERTY = "dimicraft.coordinateOffset.z";
++    private static final String SECRET_PROPERTY = "dimicraft.coordinateOffset.secret";
 +    private static final String ENABLED_ENV = "DIMICRAFT_COORDINATE_OFFSET_ENABLED";
 +    private static final String X_ENV = "DIMICRAFT_COORDINATE_OFFSET_X";
 +    private static final String Z_ENV = "DIMICRAFT_COORDINATE_OFFSET_Z";
++    private static final String SECRET_ENV = "DIMICRAFT_COORDINATE_OFFSET_SECRET";
++    private static final int PLAYER_OFFSET_RANGE = 2_000_000;
 +    private static final int SOUND_POSITION_SCALE = 8;
++    private static final Offset ZERO_OFFSET = new Offset(0, 0);
++    private static final ThreadLocal<UUID> CURRENT_PLAYER_ID = new ThreadLocal<>();
++    private static final ConcurrentMap<UUID, Offset> PLAYER_OFFSETS = new ConcurrentHashMap<>();
 +
 +    private static volatile boolean enabled;
-+    private static volatile int blockOffsetX;
-+    private static volatile int blockOffsetZ;
-+    private static volatile int sectionOffsetX;
-+    private static volatile int sectionOffsetZ;
-+    private static volatile int scaledSoundOffsetX;
-+    private static volatile int scaledSoundOffsetZ;
++    private static volatile Offset fallbackOffset = ZERO_OFFSET;
++    private static volatile String secret = "dimicraft";
 +
 +    static {
 +        reloadFromProperties();
@@ -45,18 +78,32 @@ index 0000000000000000000000000000000000000000..23fbb219fc1bcfb8a14925b788d4dd77
 +        configure(
 +            readBoolean(ENABLED_PROPERTY, ENABLED_ENV, false),
 +            readInt(X_PROPERTY, X_ENV, 0),
-+            readInt(Z_PROPERTY, Z_ENV, 0)
++            readInt(Z_PROPERTY, Z_ENV, 0),
++            readString(SECRET_PROPERTY, SECRET_ENV, "dimicraft")
 +        );
 +    }
 +
 +    public static void configure(final boolean enabled, final int rawBlockOffsetX, final int rawBlockOffsetZ) {
++        configure(enabled, rawBlockOffsetX, rawBlockOffsetZ, DimicraftCoordinateOffset.secret);
++    }
++
++    public static void configure(final boolean enabled, final int rawBlockOffsetX, final int rawBlockOffsetZ, final String secret) {
 +        DimicraftCoordinateOffset.enabled = enabled;
-+        DimicraftCoordinateOffset.blockOffsetX = alignToSection(rawBlockOffsetX);
-+        DimicraftCoordinateOffset.blockOffsetZ = alignToSection(rawBlockOffsetZ);
-+        DimicraftCoordinateOffset.sectionOffsetX = DimicraftCoordinateOffset.blockOffsetX >> 4;
-+        DimicraftCoordinateOffset.sectionOffsetZ = DimicraftCoordinateOffset.blockOffsetZ >> 4;
-+        DimicraftCoordinateOffset.scaledSoundOffsetX = DimicraftCoordinateOffset.blockOffsetX * SOUND_POSITION_SCALE;
-+        DimicraftCoordinateOffset.scaledSoundOffsetZ = DimicraftCoordinateOffset.blockOffsetZ * SOUND_POSITION_SCALE;
++        DimicraftCoordinateOffset.fallbackOffset = new Offset(alignToSection(rawBlockOffsetX), alignToSection(rawBlockOffsetZ));
++        DimicraftCoordinateOffset.secret = secret == null || secret.isBlank() ? "dimicraft" : secret;
++        DimicraftCoordinateOffset.PLAYER_OFFSETS.clear();
++    }
++
++    public static void pushPlayer(final UUID playerId) {
++        if (playerId == null) {
++            CURRENT_PLAYER_ID.remove();
++        } else {
++            CURRENT_PLAYER_ID.set(playerId);
++        }
++    }
++
++    public static void clearPlayer() {
++        CURRENT_PLAYER_ID.remove();
 +    }
 +
 +    public static boolean enabled() {
@@ -64,107 +111,154 @@ index 0000000000000000000000000000000000000000..23fbb219fc1bcfb8a14925b788d4dd77
 +    }
 +
 +    public static int blockOffsetX() {
-+        return blockOffsetX;
++        return currentOffset().blockX;
 +    }
 +
 +    public static int blockOffsetZ() {
-+        return blockOffsetZ;
++        return currentOffset().blockZ;
 +    }
 +
 +    public static double toClientX(final double x) {
-+        return enabled ? x + blockOffsetX : x;
++        return x + currentOffset().blockX;
 +    }
 +
 +    public static double toClientZ(final double z) {
-+        return enabled ? z + blockOffsetZ : z;
++        return z + currentOffset().blockZ;
 +    }
 +
 +    public static double toServerX(final double x) {
-+        return enabled ? x - blockOffsetX : x;
++        return x - currentOffset().blockX;
 +    }
 +
 +    public static double toServerZ(final double z) {
-+        return enabled ? z - blockOffsetZ : z;
++        return z - currentOffset().blockZ;
 +    }
 +
 +    public static int toClientBlockX(final int x) {
-+        return enabled ? x + blockOffsetX : x;
++        return x + currentOffset().blockX;
 +    }
 +
 +    public static int toClientBlockZ(final int z) {
-+        return enabled ? z + blockOffsetZ : z;
++        return z + currentOffset().blockZ;
 +    }
 +
 +    public static int toServerBlockX(final int x) {
-+        return enabled ? x - blockOffsetX : x;
++        return x - currentOffset().blockX;
 +    }
 +
 +    public static int toServerBlockZ(final int z) {
-+        return enabled ? z - blockOffsetZ : z;
++        return z - currentOffset().blockZ;
 +    }
 +
 +    public static int toClientChunkX(final int x) {
-+        return enabled ? x + sectionOffsetX : x;
++        return x + currentOffset().sectionX;
 +    }
 +
 +    public static int toClientChunkZ(final int z) {
-+        return enabled ? z + sectionOffsetZ : z;
++        return z + currentOffset().sectionZ;
 +    }
 +
 +    public static int toServerChunkX(final int x) {
-+        return enabled ? x - sectionOffsetX : x;
++        return x - currentOffset().sectionX;
 +    }
 +
 +    public static int toServerChunkZ(final int z) {
-+        return enabled ? z - sectionOffsetZ : z;
++        return z - currentOffset().sectionZ;
 +    }
 +
 +    public static int toClientSoundX(final int x) {
-+        return enabled ? x + scaledSoundOffsetX : x;
++        return x + currentOffset().scaledSoundX;
 +    }
 +
 +    public static int toClientSoundZ(final int z) {
-+        return enabled ? z + scaledSoundOffsetZ : z;
++        return z + currentOffset().scaledSoundZ;
 +    }
 +
 +    public static int toServerSoundX(final int x) {
-+        return enabled ? x - scaledSoundOffsetX : x;
++        return x - currentOffset().scaledSoundX;
 +    }
 +
 +    public static int toServerSoundZ(final int z) {
-+        return enabled ? z - scaledSoundOffsetZ : z;
++        return z - currentOffset().scaledSoundZ;
 +    }
 +
 +    public static BlockPos toClientBlockPos(final BlockPos pos) {
-+        return enabled ? new BlockPos(pos.getX() + blockOffsetX, pos.getY(), pos.getZ() + blockOffsetZ) : pos;
++        Offset offset = currentOffset();
++        return offset.enabled() ? new BlockPos(pos.getX() + offset.blockX, pos.getY(), pos.getZ() + offset.blockZ) : pos;
 +    }
 +
 +    public static BlockPos toServerBlockPos(final BlockPos pos) {
-+        return enabled ? new BlockPos(pos.getX() - blockOffsetX, pos.getY(), pos.getZ() - blockOffsetZ) : pos;
++        Offset offset = currentOffset();
++        return offset.enabled() ? new BlockPos(pos.getX() - offset.blockX, pos.getY(), pos.getZ() - offset.blockZ) : pos;
 +    }
 +
 +    public static ChunkPos toClientChunkPos(final ChunkPos pos) {
-+        return enabled ? new ChunkPos(pos.x() + sectionOffsetX, pos.z() + sectionOffsetZ) : pos;
++        Offset offset = currentOffset();
++        return offset.enabled() ? new ChunkPos(pos.x() + offset.sectionX, pos.z() + offset.sectionZ) : pos;
 +    }
 +
 +    public static ChunkPos toServerChunkPos(final ChunkPos pos) {
-+        return enabled ? new ChunkPos(pos.x() - sectionOffsetX, pos.z() - sectionOffsetZ) : pos;
++        Offset offset = currentOffset();
++        return offset.enabled() ? new ChunkPos(pos.x() - offset.sectionX, pos.z() - offset.sectionZ) : pos;
 +    }
 +
 +    public static SectionPos toClientSectionPos(final SectionPos pos) {
-+        return enabled ? SectionPos.of(pos.x() + sectionOffsetX, pos.y(), pos.z() + sectionOffsetZ) : pos;
++        Offset offset = currentOffset();
++        return offset.enabled() ? SectionPos.of(pos.x() + offset.sectionX, pos.y(), pos.z() + offset.sectionZ) : pos;
 +    }
 +
 +    public static SectionPos toServerSectionPos(final SectionPos pos) {
-+        return enabled ? SectionPos.of(pos.x() - sectionOffsetX, pos.y(), pos.z() - sectionOffsetZ) : pos;
++        Offset offset = currentOffset();
++        return offset.enabled() ? SectionPos.of(pos.x() - offset.sectionX, pos.y(), pos.z() - offset.sectionZ) : pos;
 +    }
 +
 +    public static Vec3 toClientPosition(final Vec3 pos) {
-+        return enabled ? new Vec3(pos.x + blockOffsetX, pos.y, pos.z + blockOffsetZ) : pos;
++        Offset offset = currentOffset();
++        return offset.enabled() ? new Vec3(pos.x + offset.blockX, pos.y, pos.z + offset.blockZ) : pos;
 +    }
 +
 +    public static Vec3 toServerPosition(final Vec3 pos) {
-+        return enabled ? new Vec3(pos.x - blockOffsetX, pos.y, pos.z - blockOffsetZ) : pos;
++        Offset offset = currentOffset();
++        return offset.enabled() ? new Vec3(pos.x - offset.blockX, pos.y, pos.z - offset.blockZ) : pos;
++    }
++
++    private static Offset currentOffset() {
++        if (!enabled) {
++            return ZERO_OFFSET;
++        }
++        UUID playerId = CURRENT_PLAYER_ID.get();
++        return playerId == null ? fallbackOffset : PLAYER_OFFSETS.computeIfAbsent(playerId, DimicraftCoordinateOffset::createPlayerOffset);
++    }
++
++    private static Offset createPlayerOffset(final UUID playerId) {
++        byte[] digest = digest(playerId);
++        int sectionRange = Math.max(1, PLAYER_OFFSET_RANGE >> 4);
++        int sectionX = (fallbackOffset.blockX >> 4) + boundedSectionOffset(readInt(digest, 0), sectionRange);
++        int sectionZ = (fallbackOffset.blockZ >> 4) + boundedSectionOffset(readInt(digest, 4), sectionRange);
++        return new Offset(sectionX << 4, sectionZ << 4);
++    }
++
++    private static int boundedSectionOffset(final int value, final int sectionRange) {
++        return Math.floorMod(value, sectionRange * 2 + 1) - sectionRange;
++    }
++
++    private static byte[] digest(final UUID playerId) {
++        try {
++            MessageDigest messageDigest = MessageDigest.getInstance("SHA-256");
++            messageDigest.update(secret.getBytes(StandardCharsets.UTF_8));
++            messageDigest.update((byte)':');
++            messageDigest.update(playerId.toString().getBytes(StandardCharsets.UTF_8));
++            return messageDigest.digest();
++        } catch (NoSuchAlgorithmException ex) {
++            throw new IllegalStateException(ex);
++        }
++    }
++
++    private static int readInt(final byte[] bytes, final int offset) {
++        return ((bytes[offset] & 0xFF) << 24)
++            | ((bytes[offset + 1] & 0xFF) << 16)
++            | ((bytes[offset + 2] & 0xFF) << 8)
++            | (bytes[offset + 3] & 0xFF);
 +    }
 +
 +    private static int alignToSection(final int value) {
@@ -193,9 +287,27 @@ index 0000000000000000000000000000000000000000..23fbb219fc1bcfb8a14925b788d4dd77
 +            return fallback;
 +        }
 +    }
++
++    private static String readString(final String property, final String env, final String fallback) {
++        String value = System.getProperty(property);
++        if (value == null || value.isBlank()) {
++            value = System.getenv(env);
++        }
++        return value == null || value.isBlank() ? fallback : value;
++    }
++
++    private record Offset(int blockX, int blockZ, int sectionX, int sectionZ, int scaledSoundX, int scaledSoundZ) {
++        private Offset(final int blockX, final int blockZ) {
++            this(blockX, blockZ, blockX >> 4, blockZ >> 4, blockX * SOUND_POSITION_SCALE, blockZ * SOUND_POSITION_SCALE);
++        }
++
++        private boolean enabled() {
++            return this.blockX != 0 || this.blockZ != 0;
++        }
++    }
 +}
 diff --git a/net/minecraft/core/SectionPos.java b/net/minecraft/core/SectionPos.java
-index e6595167980d93772088f63ba6dd0423489d90c4..c0fc6dcce6cbe66ee98e78e1304424ea84d0145b 100644
+index e659516..c0fc6dc 100644
 --- a/net/minecraft/core/SectionPos.java
 +++ b/net/minecraft/core/SectionPos.java
 @@ -1,12 +1,12 @@
@@ -231,8 +343,36 @@ index e6595167980d93772088f63ba6dd0423489d90c4..c0fc6dcce6cbe66ee98e78e1304424ea
  
      private SectionPos(final int x, final int y, final int z) {
          super(x, y, z);
+diff --git a/net/minecraft/network/Connection.java b/net/minecraft/network/Connection.java
+index 13faa13..d1b729d 100644
+--- a/net/minecraft/network/Connection.java
++++ b/net/minecraft/network/Connection.java
+@@ -61,6 +61,7 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
+     public static final Marker PACKET_MARKER = Util.make(MarkerFactory.getMarker("NETWORK_PACKETS"), m -> m.add(ROOT_MARKER));
+     public static final Marker PACKET_RECEIVED_MARKER = Util.make(MarkerFactory.getMarker("PACKET_RECEIVED"), m -> m.add(PACKET_MARKER));
+     public static final Marker PACKET_SENT_MARKER = Util.make(MarkerFactory.getMarker("PACKET_SENT"), m -> m.add(PACKET_MARKER));
++    public static final io.netty.util.AttributeKey<Connection> DIMICRAFT_CONNECTION_ATTRIBUTE = io.netty.util.AttributeKey.valueOf("dimigot:connection");
+     private static final ProtocolInfo<ServerHandshakePacketListener> INITIAL_PROTOCOL = HandshakeProtocols.SERVERBOUND;
+     private final PacketFlow receiving;
+     private volatile boolean sendLoginDisconnect = true;
+@@ -133,6 +134,7 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
+         super.channelActive(ctx);
+         this.channel = ctx.channel();
+         this.address = this.channel.remoteAddress();
++        this.channel.attr(DIMICRAFT_CONNECTION_ATTRIBUTE).set(this);
+         this.preparing = false; // Spigot
+         if (this.delayedDisconnect != null) {
+             this.disconnect(this.delayedDisconnect);
+@@ -584,6 +586,7 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
+     }
+ 
+     public void configurePacketHandler(final ChannelPipeline pipeline) {
++        pipeline.channel().attr(DIMICRAFT_CONNECTION_ATTRIBUTE).set(this);
+         pipeline.addLast("hackfix", new ChannelOutboundHandlerAdapter() {
+             @Override
+             public void write(final ChannelHandlerContext ctx, final Object msg, final ChannelPromise promise) throws Exception {
 diff --git a/net/minecraft/network/FriendlyByteBuf.java b/net/minecraft/network/FriendlyByteBuf.java
-index 12cd230ebe97dab655f8546948f06b93f0babf1f..a587555788ad629d8828220a9a62ab59d45bbf8f 100644
+index 12cd230..a587555 100644
 --- a/net/minecraft/network/FriendlyByteBuf.java
 +++ b/net/minecraft/network/FriendlyByteBuf.java
 @@ -16,6 +16,7 @@ import io.netty.buffer.ByteBufOutputStream;
@@ -282,8 +422,141 @@ index 12cd230ebe97dab655f8546948f06b93f0babf1f..a587555788ad629d8828220a9a62ab59
      }
  
      public GlobalPos readGlobalPos() {
+diff --git a/net/minecraft/network/PacketDecoder.java b/net/minecraft/network/PacketDecoder.java
+index 662c750..9c9284f 100644
+--- a/net/minecraft/network/PacketDecoder.java
++++ b/net/minecraft/network/PacketDecoder.java
+@@ -21,48 +21,59 @@ public class PacketDecoder<T extends PacketListener> extends ByteToMessageDecode
+ 
+     @Override
+     protected void decode(final ChannelHandlerContext ctx, final ByteBuf input, final List<Object> out) throws Exception {
+-        int readableBytes = input.readableBytes();
+-
+-        Packet<? super T> packet;
+         try {
+-            packet = this.protocolInfo.codec().decode(input);
+-        } catch (Exception e) {
+-            if (e instanceof SkipPacketException) {
+-                input.skipBytes(input.readableBytes());
++            io.papermc.paper.dimicraft.DimicraftCoordinateOffset.pushPlayer(dimicraftPlayerId(ctx));
++            int readableBytes = input.readableBytes();
++
++            Packet<? super T> packet;
++            try {
++                packet = this.protocolInfo.codec().decode(input);
++            } catch (Exception e) {
++                if (e instanceof SkipPacketException) {
++                    input.skipBytes(input.readableBytes());
++                }
++
++                throw e;
+             }
+ 
+-            throw e;
+-        }
++            PacketType<? extends Packet<? super T>> packetId = packet.type();
++            JvmProfiler.INSTANCE.onPacketReceived(this.protocolInfo.id(), packetId, ctx.channel().remoteAddress(), readableBytes);
++            if (input.readableBytes() > 0) {
++                throw new IOException(
++                    "Packet "
++                        + this.protocolInfo.id().id()
++                        + "/"
++                        + packetId
++                        + " ("
++                        + packet.getClass().getSimpleName()
++                        + ") was larger than I expected, found "
++                        + input.readableBytes()
++                        + " bytes extra whilst reading packet "
++                        + packetId
++                );
++            }
+ 
+-        PacketType<? extends Packet<? super T>> packetId = packet.type();
+-        JvmProfiler.INSTANCE.onPacketReceived(this.protocolInfo.id(), packetId, ctx.channel().remoteAddress(), readableBytes);
+-        if (input.readableBytes() > 0) {
+-            throw new IOException(
+-                "Packet "
+-                    + this.protocolInfo.id().id()
+-                    + "/"
+-                    + packetId
+-                    + " ("
+-                    + packet.getClass().getSimpleName()
+-                    + ") was larger than I expected, found "
+-                    + input.readableBytes()
+-                    + " bytes extra whilst reading packet "
+-                    + packetId
+-            );
+-        }
++            out.add(packet);
++            if (LOGGER.isDebugEnabled()) {
++                LOGGER.debug(
++                    Connection.PACKET_RECEIVED_MARKER,
++                    " IN: [{}:{}] {} -> {} bytes",
++                    this.protocolInfo.id().id(),
++                    packetId,
++                    packet.getClass().getName(),
++                    readableBytes
++                );
++            }
+ 
+-        out.add(packet);
+-        if (LOGGER.isDebugEnabled()) {
+-            LOGGER.debug(
+-                Connection.PACKET_RECEIVED_MARKER,
+-                " IN: [{}:{}] {} -> {} bytes",
+-                this.protocolInfo.id().id(),
+-                packetId,
+-                packet.getClass().getName(),
+-                readableBytes
+-            );
++            ProtocolSwapHandler.handleInboundTerminalPacket(ctx, packet);
++        } finally {
++            io.papermc.paper.dimicraft.DimicraftCoordinateOffset.clearPlayer();
+         }
++    }
+ 
+-        ProtocolSwapHandler.handleInboundTerminalPacket(ctx, packet);
++    private static java.util.UUID dimicraftPlayerId(final ChannelHandlerContext ctx) {
++        Connection connection = ctx.channel().attr(Connection.DIMICRAFT_CONNECTION_ATTRIBUTE).get();
++        net.minecraft.server.level.ServerPlayer player = connection == null ? null : connection.getPlayer();
++        return player == null ? null : player.getUUID();
+     }
+ }
+diff --git a/net/minecraft/network/PacketEncoder.java b/net/minecraft/network/PacketEncoder.java
+index 27316db..b332fe0 100644
+--- a/net/minecraft/network/PacketEncoder.java
++++ b/net/minecraft/network/PacketEncoder.java
+@@ -23,6 +23,7 @@ public class PacketEncoder<T extends PacketListener> extends MessageToByteEncode
+         PacketType<? extends Packet<? super T>> packetId = packet.type();
+ 
+         try {
++            io.papermc.paper.dimicraft.DimicraftCoordinateOffset.pushPlayer(dimicraftPlayerId(ctx));
+             ADVENTURE_LOCALE.set(ctx.channel().attr(io.papermc.paper.adventure.PaperAdventure.LOCALE_ATTRIBUTE).get()); // Paper - adventure; set player's locale
+             this.protocolInfo.codec().encode(output, packet);
+             int writtenBytes = output.readableBytes();
+@@ -46,6 +47,7 @@ public class PacketEncoder<T extends PacketListener> extends MessageToByteEncode
+ 
+             throw t;
+         } finally {
++            io.papermc.paper.dimicraft.DimicraftCoordinateOffset.clearPlayer();
+             // Paper start - Handle large packets disconnecting client
+             int packetLength = output.readableBytes();
+             if (packetLength > MAX_PACKET_SIZE || (packetLength > MAX_FINAL_PACKET_SIZE && packet.hasLargePacketFallback())) {
+@@ -56,6 +58,12 @@ public class PacketEncoder<T extends PacketListener> extends MessageToByteEncode
+         }
+     }
+ 
++    private static java.util.UUID dimicraftPlayerId(final ChannelHandlerContext ctx) {
++        Connection connection = ctx.channel().attr(Connection.DIMICRAFT_CONNECTION_ATTRIBUTE).get();
++        net.minecraft.server.level.ServerPlayer player = connection == null ? null : connection.getPlayer();
++        return player == null ? null : player.getUUID();
++    }
++
+     // Paper start
+     // packet size is encoded into 3-byte varint
+     private static final int MAX_FINAL_PACKET_SIZE = (1 << 21) - 1;
 diff --git a/net/minecraft/network/protocol/game/ClientboundAddEntityPacket.java b/net/minecraft/network/protocol/game/ClientboundAddEntityPacket.java
-index cff05f64af7f425b77cbbd7680c5cc592faa798c..c3922433e978117f36bd08bb55c28d422cd88caf 100644
+index cff05f6..c392243 100644
 --- a/net/minecraft/network/protocol/game/ClientboundAddEntityPacket.java
 +++ b/net/minecraft/network/protocol/game/ClientboundAddEntityPacket.java
 @@ -1,5 +1,6 @@
@@ -318,7 +591,7 @@ index cff05f64af7f425b77cbbd7680c5cc592faa798c..c3922433e978117f36bd08bb55c28d42
          output.writeByte(this.xRot);
          output.writeByte(this.yRot);
 diff --git a/net/minecraft/network/protocol/game/ClientboundDamageEventPacket.java b/net/minecraft/network/protocol/game/ClientboundDamageEventPacket.java
-index fbb3c8a92a4f6a12fac98f860456c861eef0d461..fa73e3a7f81e235774922d2e173fdb075fbe250b 100644
+index fbb3c8a..fa73e3a 100644
 --- a/net/minecraft/network/protocol/game/ClientboundDamageEventPacket.java
 +++ b/net/minecraft/network/protocol/game/ClientboundDamageEventPacket.java
 @@ -1,5 +1,6 @@
@@ -350,7 +623,7 @@ index fbb3c8a92a4f6a12fac98f860456c861eef0d461..fa73e3a7f81e235774922d2e173fdb07
      }
  
 diff --git a/net/minecraft/network/protocol/game/ClientboundExplodePacket.java b/net/minecraft/network/protocol/game/ClientboundExplodePacket.java
-index 8358f24ed1646b138382b7aae71e4456f3208caf..5b0cafd998b4746d22fc095a3ad0c2b087225b03 100644
+index 8358f24..5b0cafd 100644
 --- a/net/minecraft/network/protocol/game/ClientboundExplodePacket.java
 +++ b/net/minecraft/network/protocol/game/ClientboundExplodePacket.java
 @@ -1,12 +1,12 @@
@@ -418,7 +691,7 @@ index 8358f24ed1646b138382b7aae71e4456f3208caf..5b0cafd998b4746d22fc095a3ad0c2b0
      @Override
      public PacketType<ClientboundExplodePacket> type() {
 diff --git a/net/minecraft/network/protocol/game/ClientboundInitializeBorderPacket.java b/net/minecraft/network/protocol/game/ClientboundInitializeBorderPacket.java
-index 77276fef40271afa4b5ebafed259fbb55bbd30eb..3d77952789e803aaa5e223fc6b8074a0a1cea160 100644
+index 77276fe..3d77952 100644
 --- a/net/minecraft/network/protocol/game/ClientboundInitializeBorderPacket.java
 +++ b/net/minecraft/network/protocol/game/ClientboundInitializeBorderPacket.java
 @@ -1,5 +1,6 @@
@@ -451,7 +724,7 @@ index 77276fef40271afa4b5ebafed259fbb55bbd30eb..3d77952789e803aaa5e223fc6b8074a0
          output.writeDouble(this.newSize);
          output.writeVarLong(this.lerpTime);
 diff --git a/net/minecraft/network/protocol/game/ClientboundLevelChunkWithLightPacket.java b/net/minecraft/network/protocol/game/ClientboundLevelChunkWithLightPacket.java
-index be8ba1425b55a4948afb3f86c0feb3e2b1c2b561..f9642f92c03de544337883a11e5410371bc6ed3a 100644
+index be8ba14..f9642f9 100644
 --- a/net/minecraft/network/protocol/game/ClientboundLevelChunkWithLightPacket.java
 +++ b/net/minecraft/network/protocol/game/ClientboundLevelChunkWithLightPacket.java
 @@ -1,5 +1,6 @@
@@ -482,7 +755,7 @@ index be8ba1425b55a4948afb3f86c0feb3e2b1c2b561..f9642f92c03de544337883a11e541037
          this.lightData.write(output);
      }
 diff --git a/net/minecraft/network/protocol/game/ClientboundLevelParticlesPacket.java b/net/minecraft/network/protocol/game/ClientboundLevelParticlesPacket.java
-index 65973f12d7f6e9084b6bd8c0ba6411f66b6ef3eb..0a7e6cb751f538d84acdb72a306840f9ee69ad52 100644
+index 65973f1..0a7e6cb 100644
 --- a/net/minecraft/network/protocol/game/ClientboundLevelParticlesPacket.java
 +++ b/net/minecraft/network/protocol/game/ClientboundLevelParticlesPacket.java
 @@ -1,5 +1,6 @@
@@ -517,7 +790,7 @@ index 65973f12d7f6e9084b6bd8c0ba6411f66b6ef3eb..0a7e6cb751f538d84acdb72a306840f9
          output.writeFloat(this.yDist);
          output.writeFloat(this.zDist);
 diff --git a/net/minecraft/network/protocol/game/ClientboundLightUpdatePacket.java b/net/minecraft/network/protocol/game/ClientboundLightUpdatePacket.java
-index b6cd50dfa402223ffa0867bfd66a6b72e1caed2e..f9aa6d0d5a1f78aee05275d8157961c5b5e01a1c 100644
+index b6cd50d..f9aa6d0 100644
 --- a/net/minecraft/network/protocol/game/ClientboundLightUpdatePacket.java
 +++ b/net/minecraft/network/protocol/game/ClientboundLightUpdatePacket.java
 @@ -1,5 +1,6 @@
@@ -547,7 +820,7 @@ index b6cd50dfa402223ffa0867bfd66a6b72e1caed2e..f9aa6d0d5a1f78aee05275d8157961c5
      }
  
 diff --git a/net/minecraft/network/protocol/game/ClientboundMoveVehiclePacket.java b/net/minecraft/network/protocol/game/ClientboundMoveVehiclePacket.java
-index 2e62cd834b26c9501a65ee5b7417f98d1581d440..732f16aeaeae797169ec49d969b91291475243c7 100644
+index 2e62cd8..732f16a 100644
 --- a/net/minecraft/network/protocol/game/ClientboundMoveVehiclePacket.java
 +++ b/net/minecraft/network/protocol/game/ClientboundMoveVehiclePacket.java
 @@ -1,7 +1,7 @@
@@ -592,7 +865,7 @@ index 2e62cd834b26c9501a65ee5b7417f98d1581d440..732f16aeaeae797169ec49d969b91291
          return new ClientboundMoveVehiclePacket(entity.position(), entity.getYRot(), entity.getXRot());
      }
 diff --git a/net/minecraft/network/protocol/game/ClientboundPlayerLookAtPacket.java b/net/minecraft/network/protocol/game/ClientboundPlayerLookAtPacket.java
-index 72be59be447bd33577bb086680a3d735527d8ac3..12f03528d3d0a8fb3d7baf34dbc3c7eab6e446af 100644
+index 72be59b..12f0352 100644
 --- a/net/minecraft/network/protocol/game/ClientboundPlayerLookAtPacket.java
 +++ b/net/minecraft/network/protocol/game/ClientboundPlayerLookAtPacket.java
 @@ -1,5 +1,6 @@
@@ -627,7 +900,7 @@ index 72be59be447bd33577bb086680a3d735527d8ac3..12f03528d3d0a8fb3d7baf34dbc3c7ea
          if (this.atEntity) {
              output.writeVarInt(this.entity);
 diff --git a/net/minecraft/network/protocol/game/ClientboundSetBorderCenterPacket.java b/net/minecraft/network/protocol/game/ClientboundSetBorderCenterPacket.java
-index 5652866fe2f287a80da2d7765b6bdc0bb289bf46..338af0cb58f0a5043f9e48a342e675d818f3445b 100644
+index 5652866..338af0c 100644
 --- a/net/minecraft/network/protocol/game/ClientboundSetBorderCenterPacket.java
 +++ b/net/minecraft/network/protocol/game/ClientboundSetBorderCenterPacket.java
 @@ -1,5 +1,6 @@
@@ -656,7 +929,7 @@ index 5652866fe2f287a80da2d7765b6bdc0bb289bf46..338af0cb58f0a5043f9e48a342e675d8
  
      @Override
 diff --git a/net/minecraft/network/protocol/game/ClientboundSetChunkCacheCenterPacket.java b/net/minecraft/network/protocol/game/ClientboundSetChunkCacheCenterPacket.java
-index 6db200daaea3fc72f58422c704dd3f6aec5e5f5d..ef2fd8bd1bdcf9a87b476567222462b76c6b35d6 100644
+index 6db200d..ef2fd8b 100644
 --- a/net/minecraft/network/protocol/game/ClientboundSetChunkCacheCenterPacket.java
 +++ b/net/minecraft/network/protocol/game/ClientboundSetChunkCacheCenterPacket.java
 @@ -1,5 +1,6 @@
@@ -685,7 +958,7 @@ index 6db200daaea3fc72f58422c704dd3f6aec5e5f5d..ef2fd8bd1bdcf9a87b476567222462b7
  
      @Override
 diff --git a/net/minecraft/network/protocol/game/ClientboundSoundPacket.java b/net/minecraft/network/protocol/game/ClientboundSoundPacket.java
-index 23f17c7e4020f552569a739f8eae5132e16a72fa..ba6015f30bacba251a2ba8e5db78c77e262ca628 100644
+index 23f17c7..ba6015f 100644
 --- a/net/minecraft/network/protocol/game/ClientboundSoundPacket.java
 +++ b/net/minecraft/network/protocol/game/ClientboundSoundPacket.java
 @@ -1,5 +1,6 @@
@@ -720,7 +993,7 @@ index 23f17c7e4020f552569a739f8eae5132e16a72fa..ba6015f30bacba251a2ba8e5db78c77e
          output.writeFloat(this.pitch);
          output.writeLong(this.seed);
 diff --git a/net/minecraft/network/protocol/game/ServerboundMovePlayerPacket.java b/net/minecraft/network/protocol/game/ServerboundMovePlayerPacket.java
-index e712913a8dfc59a25a75ca38cb65f25795086eaf..2087392f2b1449c88fe06249bc038c61621f6274 100644
+index e712913..2087392 100644
 --- a/net/minecraft/network/protocol/game/ServerboundMovePlayerPacket.java
 +++ b/net/minecraft/network/protocol/game/ServerboundMovePlayerPacket.java
 @@ -1,5 +1,6 @@
@@ -779,7 +1052,7 @@ index e712913a8dfc59a25a75ca38cb65f25795086eaf..2087392f2b1449c88fe06249bc038c61
              output.writeFloat(this.xRot);
              output.writeByte(ServerboundMovePlayerPacket.packFlags(this.onGround, this.horizontalCollision));
 diff --git a/net/minecraft/network/protocol/game/ServerboundMoveVehiclePacket.java b/net/minecraft/network/protocol/game/ServerboundMoveVehiclePacket.java
-index 27403c671d8b6f82bce593ec26586bbf3aad91a1..2cf5008af682500b7132a1ecb123c4446b13973b 100644
+index 27403c6..2cf5008 100644
 --- a/net/minecraft/network/protocol/game/ServerboundMoveVehiclePacket.java
 +++ b/net/minecraft/network/protocol/game/ServerboundMoveVehiclePacket.java
 @@ -1,7 +1,7 @@
@@ -828,7 +1101,7 @@ index 27403c671d8b6f82bce593ec26586bbf3aad91a1..2cf5008af682500b7132a1ecb123c444
          return entity.isInterpolating()
              ? new ServerboundMoveVehiclePacket(
 diff --git a/net/minecraft/world/entity/PositionMoveRotation.java b/net/minecraft/world/entity/PositionMoveRotation.java
-index d0a2ae3f648a3636423480d91b7f7ad03da26132..23c527b11c80d97a50dcc95b9741d5312c5c7f35 100644
+index d0a2ae3..23c527b 100644
 --- a/net/minecraft/world/entity/PositionMoveRotation.java
 +++ b/net/minecraft/world/entity/PositionMoveRotation.java
 @@ -1,25 +1,32 @@
@@ -876,3 +1149,6 @@ index d0a2ae3f648a3636423480d91b7f7ad03da26132..23c527b11c80d97a50dcc95b9741d531
  
      public static PositionMoveRotation of(final Entity entity) {
          return entity.isInterpolating()
+-- 
+2.51.0.windows.1
+
