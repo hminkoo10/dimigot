@@ -111,10 +111,11 @@
          if (wasAccessible && !isAccessible) {
 +            // Paper start
 +            if (this.isFullChunkReady) {
-+                ca.spottedleaf.moonrise.common.PlatformHooks.get().onChunkNotBorder(this.fullChunkFuture.join().orElseThrow(IllegalStateException::new), this); // Paper
++                this.fullChunkFuture.join().ifSuccess(chunk -> ca.spottedleaf.moonrise.common.PlatformHooks.get().onChunkNotBorder(chunk, this));
 +            }
 +            // Paper end
-             this.fullChunkFuture.complete(UNLOADED_LEVEL_CHUNK);
+-            this.fullChunkFuture.complete(UNLOADED_LEVEL_CHUNK);
++            this.fullChunkFuture.complete(UNLOADED_LEVEL_CHUNK); this.isFullChunkReady = false; // Paper - cache chunk ticking stage
              this.fullChunkFuture = UNLOADED_LEVEL_CHUNK_FUTURE;
          }
 @@ -292,11 +_,25 @@
@@ -137,7 +138,7 @@
 -            this.tickingChunkFuture.complete(UNLOADED_LEVEL_CHUNK);
 +            // Paper start
 +            if (this.isTickingReady) {
-+                ca.spottedleaf.moonrise.common.PlatformHooks.get().onChunkNotTicking(this.tickingChunkFuture.join().orElseThrow(IllegalStateException::new), this); // Paper
++                this.tickingChunkFuture.join().ifSuccess(chunk -> ca.spottedleaf.moonrise.common.PlatformHooks.get().onChunkNotTicking(chunk, this));
 +            }
 +            // Paper end
 +            this.tickingChunkFuture.complete(ChunkHolder.UNLOADED_LEVEL_CHUNK); this.isTickingReady = false; // Paper - cache chunk ticking stage
@@ -163,7 +164,7 @@
 -            this.entityTickingChunkFuture.complete(UNLOADED_LEVEL_CHUNK);
 +            // Paper start
 +            if (this.isEntityTickingReady) {
-+                ca.spottedleaf.moonrise.common.PlatformHooks.get().onChunkNotEntityTicking(this.entityTickingChunkFuture.join().orElseThrow(IllegalStateException::new), this);
++                this.entityTickingChunkFuture.join().ifSuccess(chunk -> ca.spottedleaf.moonrise.common.PlatformHooks.get().onChunkNotEntityTicking(chunk, this));
 +            }
 +            // Paper end
 +            this.entityTickingChunkFuture.complete(ChunkHolder.UNLOADED_LEVEL_CHUNK); this.isEntityTickingReady = false; // Paper - cache chunk ticking stage
