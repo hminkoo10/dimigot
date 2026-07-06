@@ -228,6 +228,7 @@ tasks.createPaperclipJar {
             }
             Files.writeString(librariesList, librariesText)
         }
+        Files.copy(paperclipJar, paperclipJar.parent.resolve("dimigot.jar"), StandardCopyOption.REPLACE_EXISTING)
     }
 }
 
