@@ -4,7 +4,7 @@ Date: Mon, 6 Jul 2026 09:47:03 +0900
 Subject: [PATCH] Dimicraft coordinate offset
 
 ---
- .../dimicraft/DimicraftCoordinateOffset.java  | 272 ++++++++++++++++++
+ .../dimicraft/DimicraftCoordinateOffset.java  | 262 ++++++++++++++++++
  net/minecraft/core/SectionPos.java            |  14 +-
  net/minecraft/network/Connection.java         |   3 +
  net/minecraft/network/FriendlyByteBuf.java    |  13 +-
@@ -25,15 +25,15 @@ Subject: [PATCH] Dimicraft coordinate offset
  .../game/ServerboundMovePlayerPacket.java     |  17 +-
  .../game/ServerboundMoveVehiclePacket.java    |  29 +-
  .../world/entity/PositionMoveRotation.java    |  31 +-
- 21 files changed, 487 insertions(+), 140 deletions(-)
+ 21 files changed, 477 insertions(+), 140 deletions(-)
  create mode 100644 io/papermc/paper/dimicraft/DimicraftCoordinateOffset.java
 
 diff --git a/io/papermc/paper/dimicraft/DimicraftCoordinateOffset.java b/io/papermc/paper/dimicraft/DimicraftCoordinateOffset.java
 new file mode 100644
-index 0000000..6a69dbc
+index 0000000..ecb62db
 --- /dev/null
 +++ b/io/papermc/paper/dimicraft/DimicraftCoordinateOffset.java
-@@ -0,0 +1,272 @@
+@@ -0,0 +1,262 @@
 +package io.papermc.paper.dimicraft;
 +
 +import net.minecraft.core.BlockPos;
@@ -41,9 +41,7 @@ index 0000000..6a69dbc
 +import net.minecraft.world.level.ChunkPos;
 +import net.minecraft.world.phys.Vec3;
 +
-+import java.nio.charset.StandardCharsets;
-+import java.security.MessageDigest;
-+import java.security.NoSuchAlgorithmException;
++import java.security.SecureRandom;
 +import java.util.UUID;
 +import java.util.concurrent.ConcurrentHashMap;
 +import java.util.concurrent.ConcurrentMap;
@@ -62,6 +60,7 @@ index 0000000..6a69dbc
 +    private static final Offset ZERO_OFFSET = new Offset(0, 0);
 +    private static final ThreadLocal<UUID> CURRENT_PLAYER_ID = new ThreadLocal<>();
 +    private static final ConcurrentMap<UUID, Offset> PLAYER_OFFSETS = new ConcurrentHashMap<>();
++    private static final SecureRandom OFFSET_RANDOM = new SecureRandom();
 +
 +    private static volatile boolean enabled;
 +    private static volatile Offset fallbackOffset = ZERO_OFFSET;
@@ -104,6 +103,16 @@ index 0000000..6a69dbc
 +
 +    public static void clearPlayer() {
 +        CURRENT_PLAYER_ID.remove();
++    }
++
++    /**
++     * Discards the stored offset so the next session gets a fresh random one.
++     * Must be called before login completes, while no play packets are in flight.
++     */
++    public static void rotatePlayer(final UUID playerId) {
++        if (playerId != null) {
++            PLAYER_OFFSETS.remove(playerId);
++        }
 +    }
 +
 +    public static boolean enabled() {
@@ -230,35 +239,16 @@ index 0000000..6a69dbc
 +        return playerId == null ? fallbackOffset : PLAYER_OFFSETS.computeIfAbsent(playerId, DimicraftCoordinateOffset::createPlayerOffset);
 +    }
 +
++    // Random per session: entries are evicted at login via rotatePlayer, so every connection sees fresh coordinates.
 +    private static Offset createPlayerOffset(final UUID playerId) {
-+        byte[] digest = digest(playerId);
 +        int sectionRange = Math.max(1, PLAYER_OFFSET_RANGE >> 4);
-+        int sectionX = (fallbackOffset.blockX >> 4) + boundedSectionOffset(readInt(digest, 0), sectionRange);
-+        int sectionZ = (fallbackOffset.blockZ >> 4) + boundedSectionOffset(readInt(digest, 4), sectionRange);
++        int sectionX = (fallbackOffset.blockX >> 4) + boundedSectionOffset(OFFSET_RANDOM.nextInt(), sectionRange);
++        int sectionZ = (fallbackOffset.blockZ >> 4) + boundedSectionOffset(OFFSET_RANDOM.nextInt(), sectionRange);
 +        return new Offset(sectionX << 4, sectionZ << 4);
 +    }
 +
 +    private static int boundedSectionOffset(final int value, final int sectionRange) {
 +        return Math.floorMod(value, sectionRange * 2 + 1) - sectionRange;
-+    }
-+
-+    private static byte[] digest(final UUID playerId) {
-+        try {
-+            MessageDigest messageDigest = MessageDigest.getInstance("SHA-256");
-+            messageDigest.update(secret.getBytes(StandardCharsets.UTF_8));
-+            messageDigest.update((byte)':');
-+            messageDigest.update(playerId.toString().getBytes(StandardCharsets.UTF_8));
-+            return messageDigest.digest();
-+        } catch (NoSuchAlgorithmException ex) {
-+            throw new IllegalStateException(ex);
-+        }
-+    }
-+
-+    private static int readInt(final byte[] bytes, final int offset) {
-+        return ((bytes[offset] & 0xFF) << 24)
-+            | ((bytes[offset + 1] & 0xFF) << 16)
-+            | ((bytes[offset + 2] & 0xFF) << 8)
-+            | (bytes[offset + 3] & 0xFF);
 +    }
 +
 +    private static int alignToSection(final int value) {

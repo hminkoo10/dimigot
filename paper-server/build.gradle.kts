@@ -171,7 +171,6 @@ tasks.jar {
         val gitHash = git.exec(providers, "rev-parse", "--short=7", "HEAD").get().trim()
         val implementationVersion = "$mcVersion-${build ?: "DEV"}-$gitHash"
         val date = git.exec(providers, "show", "-s", "--format=%ci", gitHash).get().trim()
-        val gitBranch = git.exec(providers, "rev-parse", "--abbrev-ref", "HEAD").get().trim()
         attributes(
             "Main-Class" to "org.bukkit.craftbukkit.Main",
             "Implementation-Title" to "dimigot",
@@ -184,7 +183,7 @@ tasks.jar {
             "Brand-Name" to "dimigot",
             "Build-Number" to (build ?: ""),
             "Build-Time" to buildTime.toString(),
-            "Git-Branch" to gitBranch,
+            "Git-Branch" to "",
             "Git-Commit" to gitHash,
         )
         for (tld in setOf("net", "com", "org")) {
