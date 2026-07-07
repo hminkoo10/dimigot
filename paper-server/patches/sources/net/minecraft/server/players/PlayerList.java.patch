@@ -520,7 +520,8 @@
          player.connection.send(new ClientboundRespawnPacket(player.createCommonSpawnInfo(playerLevel), dataToKeep));
 -        player.connection.teleport(player.getX(), player.getY(), player.getZ(), player.getYRot(), player.getXRot());
 +        player.connection.internalTeleport(player.getX(), player.getY(), player.getZ(), player.getYRot(), player.getXRot()); // Paper
-         player.connection.send(new ClientboundSetDefaultSpawnPositionPacket(level.getRespawnData()));
+-        player.connection.send(new ClientboundSetDefaultSpawnPositionPacket(level.getRespawnData()));
++        player.connection.send(new ClientboundSetDefaultSpawnPositionPacket(dimicraftCompassRespawnData(level)));
          player.connection.send(new ClientboundChangeDifficultyPacket(levelData.getDifficulty(), levelData.isDifficultyLocked()));
          player.connection.send(new ClientboundSetExperiencePacket(player.experienceProgress, player.totalExperience, player.experienceLevel));
 @@ -426,9 +_,15 @@
@@ -737,13 +738,14 @@
      }
  
      public UserWhiteList getWhiteList() {
-@@ -651,12 +_,20 @@
+@@ -651,14 +_,31 @@
      public void sendLevelInfo(final ServerPlayer player, final ServerLevel level) {
          WorldBorder worldBorder = level.getWorldBorder();
          player.connection.send(new ClientboundInitializeBorderPacket(worldBorder));
 -        player.connection.send(this.server.clockManager().createFullSyncPacket());
 +        player.connection.send(level.clockManager().createFullSyncPacket(player)); // Paper - per-world time; per-player time
-         player.connection.send(new ClientboundSetDefaultSpawnPositionPacket(level.getRespawnData()));
+-        player.connection.send(new ClientboundSetDefaultSpawnPositionPacket(level.getRespawnData()));
++        player.connection.send(new ClientboundSetDefaultSpawnPositionPacket(dimicraftCompassRespawnData(level)));
 +        // Paper start - view distances
 +        player.connection.send(new ClientboundSetChunkCacheRadiusPacket(io.papermc.paper.FeatureHooks.getViewDistance(level)));
 +        player.connection.send(new ClientboundSetSimulationDistancePacket(io.papermc.paper.FeatureHooks.getSimulationDistance(level)));
@@ -762,6 +764,17 @@
          }
  
          player.connection.send(new ClientboundGameEventPacket(ClientboundGameEventPacket.LEVEL_CHUNKS_LOAD_START, 0.0F));
+         this.server.tickRateManager().updateJoiningPlayer(player);
+     }
++
++    private static LevelData.RespawnData dimicraftCompassRespawnData(final ServerLevel level) {
++        LevelData.RespawnData respawnData = level.getRespawnData();
++        if (respawnData.dimension().equals(level.dimension())) {
++            return respawnData;
++        }
++
++        return LevelData.RespawnData.of(level.dimension(), respawnData.pos(), respawnData.yaw(), respawnData.pitch());
++    }
 @@ -665,8 +_,21 @@
  
      public void sendAllPlayerInfo(final ServerPlayer player) {
